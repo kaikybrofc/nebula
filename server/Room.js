@@ -7,6 +7,7 @@ import {
   NET_DELTA_QUANTIZE_MASS,
   NET_DELTA_QUANTIZE_POS,
   NET_DELTA_QUANTIZE_RADIUS,
+  NET_CONFIG,
   PELLET_CONFIG,
   PLAYER_CONFIG,
   SIM_CONFIG,
@@ -29,15 +30,20 @@ function quantizeBucket(value, step) {
 }
 
 export default class Room {
-  constructor() {
+  constructor({ tickRate = NET_CONFIG.tps } = {}) {
     this.rng = new SeededRandom(SIM_CONFIG.seed);
     this.world = new World(this.rng);
     this.world.seedFood();
 
     this.tick = 0;
+    this.tickDurationMs = 1000 / Math.max(1, tickRate);
     this.nextPlayerId = 1;
 
     this.clients = new Map();
+  }
+
+  getServerTimeMs() {
+    return this.tick * this.tickDurationMs;
   }
 
   addClient(socket, nickname) {
@@ -534,6 +540,7 @@ export default class Room {
     return {
       type: 'snapshot_full',
       tick: this.tick,
+      serverTimeMs: this.getServerTimeMs(),
       selfId: client.player.id,
       ackSeq: client.lastProcessedSeq,
       entities: {
@@ -696,6 +703,7 @@ export default class Room {
     return {
       type: 'snapshot_delta',
       tick: this.tick,
+      serverTimeMs: this.getServerTimeMs(),
       selfId: client.player.id,
       ackSeq: client.lastProcessedSeq,
       create,

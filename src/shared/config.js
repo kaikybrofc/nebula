@@ -11,7 +11,7 @@ export const GRID_CONFIG = {
 
 export const NET_CONFIG = {
   tps: 30,
-  interpDelayTicks: 4,
+  interpDelayMs: 120,
   maxBufferedSnapshots: 90,
 };
 

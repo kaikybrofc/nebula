@@ -1,6 +1,8 @@
 import { NET_CONFIG } from '../../shared/config';
 import { lerp } from '../../shared/utils';
 
+const CLOCK_SYNC_ALPHA = 0.1;
+
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
 }
@@ -8,6 +10,16 @@ function clamp01(value) {
 function parseAckSeq(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseServerTimeMs(value, tick) {
+  const parsed = Number(value);
+
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+
+  return tick * (1000 / NET_CONFIG.tps);
 }
 
 function cloneEntity(entity) {
@@ -124,8 +136,9 @@ function aggregateLocalBlobs(blobs, selfId) {
 function normalizeSnapshot(rawSnapshot) {
   return {
     tick: rawSnapshot.tick,
+    serverTimeMs: parseServerTimeMs(rawSnapshot.serverTimeMs, rawSnapshot.tick),
     selfId: rawSnapshot.selfId ?? null,
-    ackSeq: parseAckSeq(rawSnapshot.ackSeq, 0),
+    ackSeq: parseAckSeq(rawSnapshot.ackSeq, -1),
     entities: {
       blobs: rawSnapshot.entities?.blobs ?? [],
       foods: rawSnapshot.entities?.foods ?? [],
@@ -139,6 +152,7 @@ export default class RemoteState {
   constructor() {
     this.selfId = null;
     this.latestTick = 0;
+    this.latestServerTimeMs = 0;
     this.latestLeaderboard = [];
     this.latestAckSeq = -1;
     this.latestEntities = {
@@ -156,6 +170,9 @@ export default class RemoteState {
 
     // Interpolation buffer still keeps complete snapshots.
     this.snapshotBuffer = [];
+
+    // Approximation of (clientNowMs - serverTimeMs) for converting local clock to server clock.
+    this.clockOffsetMs = null;
   }
 
   applySnapshot(snapshot) {
@@ -175,6 +192,7 @@ export default class RemoteState {
 
   applyFullSnapshot(snapshot) {
     const normalized = normalizeSnapshot(snapshot);
+    this.updateClockOffset(normalized.serverTimeMs);
 
     this.selfId = normalized.selfId;
     this.currentState = {
@@ -187,6 +205,7 @@ export default class RemoteState {
     this.snapshotBuffer = [];
     this.pushReconstructedSnapshot(
       normalized.tick,
+      normalized.serverTimeMs,
       normalized.leaderboard,
       normalized.selfId,
       normalized.ackSeq,
@@ -207,8 +226,12 @@ export default class RemoteState {
       snapshot.delete?.pellets,
     );
 
+    const serverTimeMs = parseServerTimeMs(snapshot.serverTimeMs, snapshot.tick);
+    this.updateClockOffset(serverTimeMs);
+
     this.pushReconstructedSnapshot(
       snapshot.tick,
+      serverTimeMs,
       snapshot.leaderboard ?? [],
       this.selfId,
       parseAckSeq(snapshot.ackSeq, this.latestAckSeq),
@@ -240,9 +263,10 @@ export default class RemoteState {
     }
   }
 
-  pushReconstructedSnapshot(tick, leaderboard, selfId, ackSeq) {
+  pushReconstructedSnapshot(tick, serverTimeMs, leaderboard, selfId, ackSeq) {
     const normalizedSnapshot = {
       tick,
+      serverTimeMs,
       selfId: selfId ?? this.selfId,
       ackSeq,
       entities: {
@@ -261,7 +285,13 @@ export default class RemoteState {
       this.snapshotBuffer[snapshotIndex] = normalizedSnapshot;
     } else {
       this.snapshotBuffer.push(normalizedSnapshot);
-      this.snapshotBuffer.sort((left, right) => left.tick - right.tick);
+      this.snapshotBuffer.sort((left, right) => {
+        if (left.serverTimeMs !== right.serverTimeMs) {
+          return left.serverTimeMs - right.serverTimeMs;
+        }
+
+        return left.tick - right.tick;
+      });
     }
 
     if (this.snapshotBuffer.length > NET_CONFIG.maxBufferedSnapshots) {
@@ -271,21 +301,58 @@ export default class RemoteState {
     const latestSnapshot = this.snapshotBuffer[this.snapshotBuffer.length - 1];
 
     this.latestTick = latestSnapshot.tick;
+    this.latestServerTimeMs = latestSnapshot.serverTimeMs;
     this.latestEntities = latestSnapshot.entities;
     this.latestLeaderboard = latestSnapshot.leaderboard;
     this.latestAckSeq = latestSnapshot.ackSeq ?? this.latestAckSeq;
     this.selfId = latestSnapshot.selfId ?? this.selfId;
   }
 
-  getRenderTick() {
+  getClientNowMs() {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      return performance.now();
+    }
+
+    return Date.now();
+  }
+
+  updateClockOffset(serverTimeMs) {
+    const clientNowMs = this.getClientNowMs();
+    const measuredOffsetMs = clientNowMs - serverTimeMs;
+
+    if (!Number.isFinite(measuredOffsetMs)) {
+      return;
+    }
+
+    if (this.clockOffsetMs === null) {
+      this.clockOffsetMs = measuredOffsetMs;
+      return;
+    }
+
+    this.clockOffsetMs = lerp(this.clockOffsetMs, measuredOffsetMs, CLOCK_SYNC_ALPHA);
+  }
+
+  getEstimatedServerNowMs() {
     if (this.snapshotBuffer.length === 0) {
       return 0;
     }
 
-    return this.latestTick - NET_CONFIG.interpDelayTicks;
+    if (this.clockOffsetMs === null) {
+      return this.latestServerTimeMs;
+    }
+
+    return this.getClientNowMs() - this.clockOffsetMs;
   }
 
-  findFrameSnapshots(renderTick) {
+  getRenderServerTimeMs() {
+    if (this.snapshotBuffer.length === 0) {
+      return 0;
+    }
+
+    return this.getEstimatedServerNowMs() - NET_CONFIG.interpDelayMs;
+  }
+
+  findFrameSnapshots(renderServerTimeMs) {
     if (this.snapshotBuffer.length === 0) {
       return null;
     }
@@ -293,14 +360,14 @@ export default class RemoteState {
     const firstSnapshot = this.snapshotBuffer[0];
     const lastSnapshot = this.snapshotBuffer[this.snapshotBuffer.length - 1];
 
-    if (renderTick <= firstSnapshot.tick) {
+    if (renderServerTimeMs <= firstSnapshot.serverTimeMs) {
       return {
         prev: firstSnapshot,
         next: firstSnapshot,
       };
     }
 
-    if (renderTick >= lastSnapshot.tick) {
+    if (renderServerTimeMs >= lastSnapshot.serverTimeMs) {
       return {
         prev: lastSnapshot,
         next: lastSnapshot,
@@ -313,7 +380,7 @@ export default class RemoteState {
     for (let index = 1; index < this.snapshotBuffer.length; index += 1) {
       const candidate = this.snapshotBuffer[index];
 
-      if (candidate.tick < renderTick) {
+      if (candidate.serverTimeMs < renderServerTimeMs) {
         prevSnapshot = candidate;
         continue;
       }
@@ -329,8 +396,8 @@ export default class RemoteState {
   }
 
   getInterpolatedFrame() {
-    const renderTick = this.getRenderTick();
-    const snapshotPair = this.findFrameSnapshots(renderTick);
+    const renderServerTimeMs = this.getRenderServerTimeMs();
+    const snapshotPair = this.findFrameSnapshots(renderServerTimeMs);
 
     if (!snapshotPair) {
       return {
@@ -342,8 +409,8 @@ export default class RemoteState {
     }
 
     const { prev, next } = snapshotPair;
-    const tickDelta = Math.max(1, next.tick - prev.tick);
-    const alpha = clamp01((renderTick - prev.tick) / tickDelta);
+    const serverTimeDelta = Math.max(1, next.serverTimeMs - prev.serverTimeMs);
+    const alpha = clamp01((renderServerTimeMs - prev.serverTimeMs) / serverTimeDelta);
 
     return {
       tick: lerp(prev.tick, next.tick, alpha),

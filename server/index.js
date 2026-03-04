@@ -7,7 +7,7 @@ const STEP_MS = 1000 / TICK_RATE;
 const STEP_SECONDS = 1 / TICK_RATE;
 
 const wss = new WebSocketServer({ port: PORT });
-const room = new Room();
+const room = new Room({ tickRate: TICK_RATE });
 
 wss.on('connection', (socket) => {
   socket.on('message', (rawData) => {
