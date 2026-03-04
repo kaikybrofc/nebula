@@ -1,0 +1,163 @@
+.app-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.home-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(160deg, rgba(4, 17, 28, 0.72), rgba(5, 20, 24, 0.45));
+  backdrop-filter: blur(6px);
+}
+
+.home-card {
+  width: min(440px, 100%);
+  padding: 28px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  animation: home-fade-in 380ms ease;
+}
+
+.home-kicker {
+  margin: 0;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-size: 0.72rem;
+}
+
+.home-card h1 {
+  margin: 8px 0 12px;
+  font-size: clamp(1.8rem, 5vw, 2.7rem);
+  line-height: 1.05;
+}
+
+.home-description {
+  margin: 0 0 18px;
+  color: var(--text-muted);
+}
+
+.home-form {
+  display: grid;
+  gap: 10px;
+}
+
+.home-form label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.home-form input {
+  width: 100%;
+  border: 1px solid #24485d;
+  background: rgba(9, 26, 39, 0.72);
+  color: var(--text-main);
+  border-radius: 12px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.home-form input:focus {
+  border-color: #58d3bf;
+  box-shadow: 0 0 0 3px rgba(88, 211, 191, 0.16);
+}
+
+.home-form button {
+  margin-top: 6px;
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 700;
+  color: #032321;
+  background: linear-gradient(120deg, #3bf0c4, #57d8ff);
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.home-form button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+.home-form button:active {
+  transform: translateY(0);
+}
+
+.game-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+.hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 30;
+  min-width: 190px;
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: rgba(6, 20, 32, 0.72);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+.hud h2 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.hud p {
+  margin: 4px 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.hud strong {
+  color: var(--text-main);
+}
+
+.hud-tip {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@keyframes home-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .home-card {
+    padding: 22px;
+  }
+
+  .hud {
+    top: auto;
+    bottom: 14px;
+    left: 14px;
+    right: 14px;
+    min-width: 0;
+  }
+}
