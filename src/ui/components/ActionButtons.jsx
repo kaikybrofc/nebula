@@ -26,6 +26,7 @@ export default function ActionButtons({
   ejectSize = size,
   compact = false,
   onSplit,
+  onSplitChange,
   onEjectChange,
 }) {
   return (
@@ -41,6 +42,10 @@ export default function ActionButtons({
         type="button"
         className="action-btn split-btn"
         onClick={onSplit}
+        onPointerDown={(event) => startPointerHold(event, () => onSplitChange?.(true))}
+        onPointerUp={(event) => endPointerHold(event, () => onSplitChange?.(false))}
+        onPointerCancel={(event) => endPointerHold(event, () => onSplitChange?.(false))}
+        onPointerLeave={(event) => endPointerHold(event, () => onSplitChange?.(false))}
         aria-label="Split"
       >
         <SplitIcon />

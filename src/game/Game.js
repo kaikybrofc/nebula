@@ -6,12 +6,14 @@ import NetClient from './net/NetClient';
 import PredictedState from './net/PredictedState';
 import RemoteState from './net/RemoteState';
 import {
+  ARROW_CONFIG,
   GAME_SETTINGS_DEFAULTS,
   NET_CONFIG,
   NET_PREDICTION_ENABLED,
   PLAYER_CONFIG,
   WORLD_CONFIG,
 } from '../shared/config';
+import { lerp, magnitude } from '../shared/utils';
 
 const SEND_RATE = 1 / NET_CONFIG.tps;
 const HUD_UPDATE_INTERVAL = 0.1;
@@ -108,7 +110,11 @@ export default class Game {
     this.virtualDirection = { x: 0, y: 0 };
     this.virtualDirectionActive = false;
     this.virtualSplitQueued = false;
+    this.virtualSplitActive = false;
     this.virtualEjectActive = false;
+    this.lastDesiredDirection = { x: 0, y: 0 };
+    this.arrowDirection = { x: 1, y: 0 };
+    this.arrowAlpha = 0;
 
     this.currentFps = 0;
     this.fpsTimer = 0;
@@ -145,6 +151,10 @@ export default class Game {
 
   triggerSplit() {
     this.virtualSplitQueued = true;
+  }
+
+  setSplitActive(isActive) {
+    this.virtualSplitActive = Boolean(isActive);
   }
 
   setEjectActive(isActive) {
@@ -186,7 +196,13 @@ export default class Game {
     this.virtualDirection.x = 0;
     this.virtualDirection.y = 0;
     this.virtualSplitQueued = false;
+    this.virtualSplitActive = false;
     this.virtualEjectActive = false;
+    this.lastDesiredDirection.x = 0;
+    this.lastDesiredDirection.y = 0;
+    this.arrowDirection.x = 1;
+    this.arrowDirection.y = 0;
+    this.arrowAlpha = 0;
   }
 
   resize() {
@@ -218,6 +234,7 @@ export default class Game {
     this.currentFrame = this.visualState.buildFrame(simFrame, frameDelta, selfId);
     this.updateCamera(this.currentFrame, frameDelta);
     this.updateFpsCounter(frameDelta);
+    const arrowIndicator = this.buildLocalArrowIndicator(this.currentFrame, frameDelta);
 
     this.hudTimer += frameDelta;
     if (this.hudTimer >= HUD_UPDATE_INTERVAL) {
@@ -225,7 +242,7 @@ export default class Game {
       this.publishStats();
     }
 
-    this.render(this.currentFrame);
+    this.render(this.currentFrame, arrowIndicator);
     this.animationFrameId = requestAnimationFrame(this.tick);
   }
 
@@ -237,8 +254,14 @@ export default class Game {
     const length = Math.hypot(scaledX, scaledY);
     const dx = length > 1 ? scaledX / length : scaledX;
     const dy = length > 1 ? scaledY / length : scaledY;
-    const split = this.input.consumeSplit() || this.virtualSplitQueued;
+    const split =
+      this.input.consumeSplit() ||
+      this.input.isSplitHeld() ||
+      this.virtualSplitQueued ||
+      this.virtualSplitActive;
     const eject = this.input.isEjectHeld() || this.virtualEjectActive;
+    this.lastDesiredDirection.x = dx;
+    this.lastDesiredDirection.y = dy;
     this.virtualSplitQueued = false;
 
     const inputPayload = {
@@ -332,8 +355,58 @@ export default class Game {
     this.fpsFrameCount = 0;
   }
 
-  render(frame) {
-    this.renderer.render(frame);
+  buildLocalArrowIndicator(frame, deltaTime) {
+    if (!ARROW_CONFIG.ARROW_ENABLED) {
+      return null;
+    }
+
+    const selfId = this.remoteState.getSelfId();
+    const local = aggregateOwnerBlobs(frame.blobs, selfId);
+
+    if (!local) {
+      this.arrowAlpha = 0;
+      return null;
+    }
+
+    const sourceDirection =
+      NET_PREDICTION_ENABLED && this.predictedState.hasReadyState()
+        ? this.predictedState.getInputDirection()
+        : this.lastDesiredDirection;
+    const sourceLength = magnitude(sourceDirection.x, sourceDirection.y);
+    const hasDirection = sourceLength > 0.0001;
+    const dirTargetX = hasDirection ? sourceDirection.x / sourceLength : this.arrowDirection.x;
+    const dirTargetY = hasDirection ? sourceDirection.y / sourceLength : this.arrowDirection.y;
+    const directionAlpha = 1 - Math.exp(-(ARROW_CONFIG.ARROW_SMOOTH ?? 0.35) * 60 * deltaTime);
+
+    this.arrowDirection.x = lerp(this.arrowDirection.x, dirTargetX, directionAlpha);
+    this.arrowDirection.y = lerp(this.arrowDirection.y, dirTargetY, directionAlpha);
+
+    const normalizedLength = magnitude(this.arrowDirection.x, this.arrowDirection.y);
+    if (normalizedLength > 0.0001) {
+      this.arrowDirection.x /= normalizedLength;
+      this.arrowDirection.y /= normalizedLength;
+    }
+
+    const fadeRate = hasDirection ? ARROW_CONFIG.ARROW_FADE_IN : ARROW_CONFIG.ARROW_FADE_OUT;
+    const alphaLerp = 1 - Math.exp(-(fadeRate ?? 0.14) * 60 * deltaTime);
+    this.arrowAlpha = lerp(this.arrowAlpha, hasDirection ? 1 : 0, alphaLerp);
+
+    if (this.arrowAlpha <= 0.01) {
+      return null;
+    }
+
+    return {
+      x: local.x,
+      y: local.y,
+      radius: local.largestRadius,
+      dirX: this.arrowDirection.x,
+      dirY: this.arrowDirection.y,
+      alpha: this.arrowAlpha,
+    };
+  }
+
+  render(frame, arrowIndicator = null) {
+    this.renderer.render(frame, arrowIndicator);
   }
 
   publishStats() {

@@ -1,12 +1,12 @@
 import {
-  COMBAT_CONFIG,
+  NET_VISUAL,
   NET_PREDICTION_ENABLED,
-  NET_SNAP_THRESHOLD,
   PLAYER_CONFIG,
   WORLD_CONFIG,
 } from '../../shared/config';
 import {
   clamp,
+  lerp,
   massToRadius,
 } from '../../shared/utils';
 import {
@@ -15,6 +15,7 @@ import {
   smoothAim,
   smoothDirection,
 } from '../movement.js';
+import { applyEject, applySplit } from '../sim/actions.js';
 
 function cloneCell(cell) {
   return {
@@ -45,6 +46,7 @@ export default class PredictedState {
     this.aim = { x: 1, y: 0 };
     this.splitCooldown = 0;
     this.ejectCooldown = 0;
+    this.splitHeld = false;
     this.lastAckSeq = -1;
     this.nickname = null;
     this.color = PLAYER_CONFIG.color;
@@ -102,7 +104,8 @@ export default class PredictedState {
 
   applyAuthoritativeState(selfId, authoritativeBlobs, previousById) {
     this.selfId = selfId;
-    const snapThresholdSq = NET_SNAP_THRESHOLD * NET_SNAP_THRESHOLD;
+    const softCorrectionSq = (NET_VISUAL.SNAP_ERR_THRESHOLD ?? 40) ** 2;
+    const teleportCorrectionSq = (NET_VISUAL.SNAP_TELEPORT_THRESHOLD ?? 220) ** 2;
 
     if (authoritativeBlobs.length > 0) {
       this.nickname = authoritativeBlobs[0].nickname ?? this.nickname;
@@ -112,12 +115,25 @@ export default class PredictedState {
 
     this.cells = authoritativeBlobs.map((blob) => {
       const previous = previousById.get(blob.id);
-      const shouldKeepVelocity =
+      const errorSq =
         previous &&
         distanceSquaredPositions(previous.pos, {
           x: blob.x,
           y: blob.y,
-        }) <= snapThresholdSq;
+        });
+      const shouldKeepVelocity = previous && errorSq <= teleportCorrectionSq;
+      const isSmallCorrection = previous && errorSq <= softCorrectionSq;
+      const isMediumCorrection = previous && errorSq > softCorrectionSq && errorSq < teleportCorrectionSq;
+      let simX = blob.x;
+      let simY = blob.y;
+
+      if (isSmallCorrection) {
+        simX = lerp(previous.pos.x, blob.x, 0.35);
+        simY = lerp(previous.pos.y, blob.y, 0.35);
+      } else if (isMediumCorrection) {
+        simX = lerp(previous.pos.x, blob.x, 0.72);
+        simY = lerp(previous.pos.y, blob.y, 0.72);
+      }
 
       return {
         id: blob.id,
@@ -125,13 +141,13 @@ export default class PredictedState {
         nickname: blob.nickname ?? this.nickname,
         color: blob.color ?? this.color,
         stroke: blob.stroke ?? this.stroke,
-        pos: { x: blob.x, y: blob.y },
+        pos: { x: simX, y: simY },
         vel: shouldKeepVelocity ? { ...previous.vel } : { x: 0, y: 0 },
         mass: blob.mass,
         radius: blob.r,
         mergeTimer: previous ? previous.mergeTimer : 0,
-        splitCooldown: previous ? previous.splitCooldown : 0,
         spawnProtection: previous ? previous.spawnProtection : 0,
+        splitBoostTimer: shouldKeepVelocity && previous ? previous.splitBoostTimer : 0,
       };
     });
   }
@@ -153,13 +169,8 @@ export default class PredictedState {
     this.tickTimers(deltaTime);
     this.updateInputDirection(input, deltaTime);
 
-    if (input.split) {
-      this.trySplit();
-    }
-
-    if (input.eject) {
-      this.tryEject();
-    }
+    this.trySplit(input.split, input.seq);
+    this.tryEject(input.eject, input.seq);
 
     this.updateMovement(deltaTime);
     this.resolveInternalCollisions();
@@ -172,7 +183,6 @@ export default class PredictedState {
     for (let index = 0; index < this.cells.length; index += 1) {
       const cell = this.cells[index];
       cell.mergeTimer = Math.max(0, cell.mergeTimer - deltaTime);
-      cell.splitCooldown = Math.max(0, cell.splitCooldown - deltaTime);
       cell.spawnProtection = Math.max(0, cell.spawnProtection - deltaTime);
     }
   }
@@ -297,108 +307,70 @@ export default class PredictedState {
     removeIds.add(secondary.id);
   }
 
-  getMergeDelay(mass) {
-    return clamp(
-      PLAYER_CONFIG.mergeBaseDelay + mass * PLAYER_CONFIG.mergeMassDelayFactor,
-      PLAYER_CONFIG.mergeBaseDelay,
-      PLAYER_CONFIG.mergeMaxDelay,
-    );
-  }
-
   setCellMass(cell, nextMass) {
     cell.mass = Math.max(PLAYER_CONFIG.minCellMass, nextMass);
     cell.radius = massToRadius(cell.mass);
   }
 
-  trySplit() {
-    if (this.splitCooldown > 0 || this.cells.length >= PLAYER_CONFIG.maxCells) {
-      return false;
-    }
+  trySplit(splitRequested = false, sequence = 0) {
+    const spawned = applySplit({
+      actor: this,
+      splitRequested,
+      inputDirection: this.inputDir,
+      setCellMass: (cell, nextMass) => {
+        this.setCellMass(cell, nextMass);
+      },
+      createCell: ({ x, y, mass, ownerId, nickname, color, strokeColor, vx, vy }) => {
+        const cell = {
+          id: `pred_${this.nextTempCellId}`,
+          ownerId,
+          nickname,
+          color,
+          stroke: strokeColor,
+          pos: { x, y },
+          vel: { x: vx, y: vy },
+          mass,
+          radius: massToRadius(mass),
+          mergeTimer: 0,
+          spawnProtection: 0,
+          splitBoostTimer: 0,
+        };
 
-    const spawned = [];
+        this.nextTempCellId += 1;
+        return cell;
+      },
+      clampCell: (cell) => {
+        this.clampCell(cell);
+      },
+      ownerId: this.selfId,
+      nickname: this.nickname,
+      color: this.color,
+      strokeColor: this.stroke,
+      sequence,
+      minCellMass: PLAYER_CONFIG.minCellMass,
+    });
 
-    for (let index = 0; index < this.cells.length; index += 1) {
-      const cell = this.cells[index];
-
-      if (cell.mass < PLAYER_CONFIG.minSplitMass || cell.splitCooldown > 0) {
-        continue;
-      }
-
-      if (this.cells.length + spawned.length >= PLAYER_CONFIG.maxCells) {
-        break;
-      }
-
-      const splitMass = cell.mass / 2;
-      this.setCellMass(cell, splitMass);
-      cell.mergeTimer = this.getMergeDelay(cell.mass);
-      cell.splitCooldown = PLAYER_CONFIG.splitCellCooldown;
-
-      const childRadius = massToRadius(splitMass);
-      const spawnDistance = cell.radius + childRadius + 3;
-      const child = {
-        id: `pred_${this.nextTempCellId}`,
-        ownerId: this.selfId,
-        nickname: cell.nickname,
-        color: cell.color,
-        stroke: cell.stroke,
-        pos: {
-          x: cell.pos.x + this.aim.x * spawnDistance,
-          y: cell.pos.y + this.aim.y * spawnDistance,
-        },
-        vel: {
-          x: cell.vel.x + this.aim.x * PLAYER_CONFIG.splitImpulse,
-          y: cell.vel.y + this.aim.y * PLAYER_CONFIG.splitImpulse,
-        },
-        mass: splitMass,
-        radius: childRadius,
-        mergeTimer: this.getMergeDelay(splitMass),
-        splitCooldown: PLAYER_CONFIG.splitCellCooldown,
-        spawnProtection: COMBAT_CONFIG.spawnProtectionSeconds,
-      };
-
-      this.nextTempCellId += 1;
-      this.clampCell(child);
-      spawned.push(child);
-    }
-
-    if (spawned.length === 0) {
-      return false;
-    }
-
-    this.cells.push(...spawned);
-    this.splitCooldown = PLAYER_CONFIG.splitGlobalCooldown;
-    return true;
+    return spawned.length > 0;
   }
 
-  tryEject() {
-    if (this.ejectCooldown > 0) {
-      return false;
-    }
+  tryEject(ejectRequested = false, sequence = 0) {
+    const ejectedPellets = applyEject({
+      actor: this,
+      ejectRequested,
+      inputDirection: this.inputDir,
+      sequence,
+      setCellMass: (cell, nextMass) => {
+        this.setCellMass(cell, nextMass);
+      },
+      // Prediction keeps pellet simulation server-authoritative for now.
+      createPellet: () => ({
+        id: `pred_pellet_${this.nextTempCellId++}`,
+      }),
+      ownerId: this.selfId,
+      minCellMass: PLAYER_CONFIG.minCellMass,
+    });
 
-    let ejected = false;
-
-    for (let index = 0; index < this.cells.length; index += 1) {
-      const cell = this.cells[index];
-
-      if (cell.mass < PLAYER_CONFIG.minMassToEject) {
-        continue;
-      }
-
-      const nextMass = cell.mass - PLAYER_CONFIG.ejectMass;
-
-      if (nextMass < PLAYER_CONFIG.minCellMass) {
-        continue;
-      }
-
-      this.setCellMass(cell, nextMass);
-      ejected = true;
-    }
-
-    if (ejected) {
-      this.ejectCooldown = PLAYER_CONFIG.ejectCooldown;
-    }
-
-    return ejected;
+    return ejectedPellets.length > 0;
   }
 
   clampCell(cell) {
@@ -487,5 +459,12 @@ export default class PredictedState {
     }
 
     return blobs;
+  }
+
+  getInputDirection() {
+    return {
+      x: this.inputDir.x,
+      y: this.inputDir.y,
+    };
   }
 }

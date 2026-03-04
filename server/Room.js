@@ -232,13 +232,8 @@ export default class Room {
         deltaTime,
       );
 
-      if (tickInput.split) {
-        player.trySplit(this.world);
-      }
-
-      if (tickInput.eject) {
-        this.world.addPellets(player.tryEject());
-      }
+      player.trySplit(this.world, tickInput.split, tickInput.seq);
+      this.world.addPellets(player.tryEject(tickInput.eject, tickInput.seq));
 
       player.updateMovementFromInput(this.world, deltaTime);
       client.lastProcessedSeq = Math.max(client.lastProcessedSeq, tickInput.seq);
@@ -320,7 +315,10 @@ export default class Room {
             continue;
           }
 
-          if (pellet.ownerId === cell.ownerId && pellet.age < PELLET_CONFIG.pickupDelay) {
+          const pickupDelay =
+            typeof pellet.pickupDelay === 'number' ? pellet.pickupDelay : PELLET_CONFIG.pickupDelay;
+
+          if (pellet.ownerId === cell.ownerId && pellet.age < pickupDelay) {
             continue;
           }
 

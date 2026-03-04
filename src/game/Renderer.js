@@ -1,4 +1,8 @@
-import { RENDER_CONFIG } from '../shared/config';
+import { ARROW_CONFIG, RENDER_CONFIG } from '../shared/config';
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
 
 export default class Renderer {
   constructor(canvas, context, camera, worldBounds) {
@@ -23,7 +27,7 @@ export default class Renderer {
     this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  render(frame) {
+  render(frame, localArrowIndicator = null) {
     const ctx = this.context;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -49,6 +53,7 @@ export default class Renderer {
     this.drawFoods(frame.foods, viewBounds);
     this.drawPellets(frame.pellets, viewBounds);
     this.drawBlobs(frame.blobs, viewBounds);
+    this.drawLocalDirectionArrow(localArrowIndicator);
 
     ctx.restore();
     this.drawWorldBorder();
@@ -197,5 +202,52 @@ export default class Renderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(blob.nickname, blob.x, blob.y);
+  }
+
+  drawLocalDirectionArrow(indicator) {
+    if (!ARROW_CONFIG.ARROW_ENABLED || !indicator || indicator.alpha <= 0.01) {
+      return;
+    }
+
+    const dirLength = Math.hypot(indicator.dirX, indicator.dirY);
+
+    if (dirLength <= 0.0001) {
+      return;
+    }
+
+    const dx = indicator.dirX / dirLength;
+    const dy = indicator.dirY / dirLength;
+    const radius = Math.max(8, indicator.radius || 0);
+    const arrowLen = clamp(radius * 0.55, 18, 46);
+    const arrowWidth = clamp(radius * 0.18, 6, 14);
+    const baseDistance = radius + 18;
+    const baseX = indicator.x + dx * baseDistance;
+    const baseY = indicator.y + dy * baseDistance;
+    const tipX = baseX + dx * arrowLen;
+    const tipY = baseY + dy * arrowLen;
+    const perpX = -dy;
+    const perpY = dx;
+    const leftX = baseX + perpX * arrowWidth * 0.5;
+    const leftY = baseY + perpY * arrowWidth * 0.5;
+    const rightX = baseX - perpX * arrowWidth * 0.5;
+    const rightY = baseY - perpY * arrowWidth * 0.5;
+    const ctx = this.context;
+
+    ctx.save();
+    ctx.globalAlpha = clamp(indicator.alpha, 0, 1) * 0.85;
+    ctx.fillStyle = '#e5e7eb';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.82)';
+    ctx.lineWidth = 2 / this.camera.zoom;
+    ctx.shadowColor = 'rgba(59, 130, 246, 0.35)';
+    ctx.shadowBlur = 8 / this.camera.zoom;
+
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(leftX, leftY);
+    ctx.lineTo(rightX, rightY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 }

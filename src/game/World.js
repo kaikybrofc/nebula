@@ -50,6 +50,8 @@ export default class World {
   }
 
   updatePellets(deltaTime) {
+    const alivePellets = [];
+
     for (let index = 0; index < this.pellets.length; index += 1) {
       const pellet = this.pellets[index];
 
@@ -59,7 +61,17 @@ export default class World {
       pellet.pos.x += pellet.vel.x * deltaTime;
       pellet.pos.y += pellet.vel.y * deltaTime;
       this.clampEntity(pellet);
+
+      const maxLife = typeof pellet.maxLife === 'number' ? pellet.maxLife : PELLET_CONFIG.maxLife;
+
+      if (maxLife > 0 && pellet.age >= maxLife) {
+        continue;
+      }
+
+      alivePellets.push(pellet);
     }
+
+    this.pellets = alivePellets;
   }
 
   rebuildSpatialIndexes(blobs) {

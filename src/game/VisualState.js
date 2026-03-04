@@ -1,4 +1,4 @@
-import { MOVE_CONFIG } from '../shared/config.js';
+import { NET_VISUAL } from '../shared/config.js';
 import { clamp, lerp } from '../shared/utils.js';
 
 function computeFollowAlpha(followValue, deltaTime) {
@@ -40,8 +40,8 @@ export default class VisualState {
     }
 
     const seenBlobIds = new Set();
-    const localFollow = MOVE_CONFIG.visualFollowLocal ?? MOVE_CONFIG.visualFollow ?? 0.3;
-    const remoteFollow = MOVE_CONFIG.visualFollowRemote ?? 1;
+    const localFollow = NET_VISUAL.VISUAL_FOLLOW ?? 0.28;
+    const remoteFollow = 1;
     const localAlpha = computeFollowAlpha(localFollow, deltaTime);
     const remoteAlpha = computeFollowAlpha(remoteFollow, deltaTime);
     const nextBlobs = [];

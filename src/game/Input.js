@@ -8,6 +8,7 @@ export default class Input {
     this.mouseY = 0;
 
     this.pendingSplit = false;
+    this.splitHeld = false;
     this.ejectHeld = false;
 
     this.handlePointerMove = this.handlePointerMove.bind(this);
@@ -26,6 +27,9 @@ export default class Input {
     window.removeEventListener('pointermove', this.handlePointerMove);
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
+    this.splitHeld = false;
+    this.ejectHeld = false;
+    this.pendingSplit = false;
   }
 
   centerMouse() {
@@ -43,6 +47,7 @@ export default class Input {
 
   handleKeyDown(event) {
     if (event.code === 'Space') {
+      this.splitHeld = true;
       if (!event.repeat) {
         this.pendingSplit = true;
       }
@@ -57,6 +62,11 @@ export default class Input {
   }
 
   handleKeyUp(event) {
+    if (event.code === 'Space') {
+      this.splitHeld = false;
+      return;
+    }
+
     if (event.code === 'KeyW') {
       this.ejectHeld = false;
     }
@@ -70,6 +80,10 @@ export default class Input {
 
   isEjectHeld() {
     return this.ejectHeld;
+  }
+
+  isSplitHeld() {
+    return this.splitHeld;
   }
 
   getWorldMouse(camera) {

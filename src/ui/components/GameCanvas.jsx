@@ -22,6 +22,7 @@ function GameCanvas({ nickname, onStatsChange, settings, onReady }) {
       onReady({
         setVirtualDirection: (x, y) => game.setVirtualDirection(x, y),
         triggerSplit: () => game.triggerSplit(),
+        setSplitActive: (isActive) => game.setSplitActive(isActive),
         setEjectActive: (isActive) => game.setEjectActive(isActive),
       });
     }

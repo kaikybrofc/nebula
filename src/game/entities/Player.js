@@ -2,11 +2,11 @@ import { PLAYER_CONFIG } from '../../shared/config.js';
 import {
   clamp,
   distanceSquaredPos,
-  massToRadius,
 } from '../../shared/utils.js';
 import Blob from './Blob.js';
 import Pellet from './Pellet.js';
 import { normalizeDesiredDirection, smoothAim, smoothDirection } from '../movement.js';
+import { applyEject, applySplit } from '../sim/actions.js';
 
 export default class Player {
   constructor({
@@ -31,6 +31,7 @@ export default class Player {
     this.aim = { x: 1, y: 0 };
     this.splitCooldown = 0;
     this.ejectCooldown = 0;
+    this.splitHeld = false;
     this.sensitivity = 1;
   }
 
@@ -71,7 +72,6 @@ export default class Player {
     for (let index = 0; index < this.cells.length; index += 1) {
       const cell = this.cells[index];
       cell.mergeTimer = Math.max(0, cell.mergeTimer - deltaTime);
-      cell.splitCooldown = Math.max(0, cell.splitCooldown - deltaTime);
       cell.spawnProtection = Math.max(0, cell.spawnProtection - deltaTime);
     }
   }
@@ -109,111 +109,63 @@ export default class Player {
     this.updateMovementFromInput(world, deltaTime);
   }
 
-  getMergeDelay(mass) {
-    return clamp(
-      PLAYER_CONFIG.mergeBaseDelay + mass * PLAYER_CONFIG.mergeMassDelayFactor,
-      PLAYER_CONFIG.mergeBaseDelay,
-      PLAYER_CONFIG.mergeMaxDelay,
-    );
-  }
-
-  trySplit(world) {
-    if (this.splitCooldown > 0 || this.cells.length >= PLAYER_CONFIG.maxCells) {
-      return false;
-    }
-
-    const spawned = [];
-
-    for (let index = 0; index < this.cells.length; index += 1) {
-      const cell = this.cells[index];
-
-      if (cell.mass < PLAYER_CONFIG.minSplitMass || cell.splitCooldown > 0) {
-        continue;
-      }
-
-      if (this.cells.length + spawned.length >= PLAYER_CONFIG.maxCells) {
-        break;
-      }
-
-      const splitMass = cell.mass / 2;
-      cell.setMass(splitMass);
-      cell.mergeTimer = this.getMergeDelay(cell.mass);
-      cell.splitCooldown = PLAYER_CONFIG.splitCellCooldown;
-
-      const childRadius = massToRadius(splitMass);
-      const spawnDistance = cell.radius + childRadius + 3;
-      const child = new Blob({
-        x: cell.pos.x + this.aim.x * spawnDistance,
-        y: cell.pos.y + this.aim.y * spawnDistance,
-        mass: splitMass,
-        ownerId: this.id,
-        color: this.color,
-        strokeColor: this.strokeColor,
-        nickname: this.nickname,
-        vx: cell.vel.x + this.aim.x * PLAYER_CONFIG.splitImpulse,
-        vy: cell.vel.y + this.aim.y * PLAYER_CONFIG.splitImpulse,
-      });
-
-      child.mergeTimer = this.getMergeDelay(child.mass);
-      child.splitCooldown = PLAYER_CONFIG.splitCellCooldown;
-      world.clampEntity(child);
-      spawned.push(child);
-    }
-
-    if (spawned.length === 0) {
-      return false;
-    }
-
-    this.cells.push(...spawned);
-    this.splitCooldown = PLAYER_CONFIG.splitGlobalCooldown;
-    return true;
-  }
-
-  tryEject() {
-    if (this.ejectCooldown > 0) {
-      return [];
-    }
-
-    const pellets = [];
-
-    for (let index = 0; index < this.cells.length; index += 1) {
-      const cell = this.cells[index];
-
-      if (cell.mass < PLAYER_CONFIG.minMassToEject) {
-        continue;
-      }
-
-      const nextMass = cell.mass - PLAYER_CONFIG.ejectMass;
-
-      if (nextMass < PLAYER_CONFIG.minCellMass) {
-        continue;
-      }
-
-      cell.setMass(nextMass);
-
-      const pelletMass = PLAYER_CONFIG.ejectMass;
-      const pelletRadius = massToRadius(pelletMass) * 0.62;
-      const spawnDistance = cell.radius + pelletRadius + 2;
-      const spawnX = cell.pos.x + this.aim.x * spawnDistance;
-      const spawnY = cell.pos.y + this.aim.y * spawnDistance;
-
-      pellets.push(
-        new Pellet({
-          x: spawnX,
-          y: spawnY,
-          mass: pelletMass,
-          ownerId: this.id,
-          vx: cell.vel.x * 0.3 + this.aim.x * PLAYER_CONFIG.ejectImpulse,
-          vy: cell.vel.y * 0.3 + this.aim.y * PLAYER_CONFIG.ejectImpulse,
+  trySplit(world, splitRequested = false, sequence = 0) {
+    const spawned = applySplit({
+      actor: this,
+      splitRequested,
+      inputDirection: this.inputDir,
+      setCellMass: (cell, nextMass) => {
+        cell.setMass(nextMass);
+      },
+      createCell: ({ x, y, mass, ownerId, nickname, color, strokeColor, vx, vy }) =>
+        new Blob({
+          x,
+          y,
+          mass,
+          ownerId,
+          nickname,
+          color,
+          strokeColor,
+          vx,
+          vy,
         }),
-      );
-    }
+      clampCell: (cell) => {
+        world.clampEntity(cell);
+      },
+      ownerId: this.id,
+      nickname: this.nickname,
+      color: this.color,
+      strokeColor: this.strokeColor,
+      sequence,
+      minCellMass: PLAYER_CONFIG.minCellMass,
+    });
 
-    if (pellets.length > 0) {
-      this.ejectCooldown = PLAYER_CONFIG.ejectCooldown;
-    }
+    return spawned.length > 0;
+  }
 
-    return pellets;
+  tryEject(ejectRequested = false, sequence = 0) {
+    return applyEject({
+      actor: this,
+      ejectRequested,
+      inputDirection: this.inputDir,
+      sequence,
+      setCellMass: (cell, nextMass) => {
+        cell.setMass(nextMass);
+      },
+      createPellet: ({ x, y, mass, ownerId, vx, vy, pickupDelay, maxLife }) =>
+        new Pellet({
+          x,
+          y,
+          mass,
+          ownerId,
+          vx,
+          vy,
+          pickupDelay,
+          maxLife,
+        }),
+      ownerId: this.id,
+      minCellMass: PLAYER_CONFIG.minCellMass,
+    });
   }
 
   resolveInternalCollisions(world, blobGrid) {

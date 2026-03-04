@@ -69,6 +69,11 @@ export default function App() {
           gameControlsRef.current.triggerSplit();
         }
       },
+      setSplitActive: (isActive) => {
+        if (gameControlsRef.current) {
+          gameControlsRef.current.setSplitActive(isActive);
+        }
+      },
       setEjectActive: (isActive) => {
         if (gameControlsRef.current) {
           gameControlsRef.current.setEjectActive(isActive);

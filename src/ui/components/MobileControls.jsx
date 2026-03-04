@@ -2,7 +2,13 @@ import ActionButtons from './ActionButtons';
 import Joystick from './Joystick';
 import { MOVE_CONFIG } from '../../shared/config';
 
-export default function MobileControls({ onDirectionChange, onSplit, onEjectChange, compact = false }) {
+export default function MobileControls({
+  onDirectionChange,
+  onSplit,
+  onSplitChange,
+  onEjectChange,
+  compact = false,
+}) {
   const joystickSize = compact ? 112 : 120;
   const joystickStickSize = compact ? 56 : 60;
   const splitSize = compact ? 70 : 76;
@@ -26,6 +32,7 @@ export default function MobileControls({ onDirectionChange, onSplit, onEjectChan
           ejectSize={ejectSize}
           compact
           onSplit={onSplit}
+          onSplitChange={onSplitChange}
           onEjectChange={onEjectChange}
         />
       </div>

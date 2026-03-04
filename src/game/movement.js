@@ -1,4 +1,4 @@
-import { MOVE_CONFIG } from '../shared/config.js';
+import { MOVE_CONFIG, SPLIT_CONFIG } from '../shared/config.js';
 import { applyExponentialDrag, clamp, lerp, magnitude } from '../shared/utils.js';
 
 function smoothingToAlpha(smoothing, deltaTime) {
@@ -30,10 +30,42 @@ export function normalizeDesiredDirection(dx, dy, deadzone = MOVE_CONFIG.joystic
 }
 
 export function smoothDirection(currentDirection, targetDirection, deltaTime) {
-  const alpha = smoothingToAlpha(MOVE_CONFIG.inputSmoothing, deltaTime);
+  const directionSmoothing = MOVE_CONFIG.dirSmooth ?? MOVE_CONFIG.inputSmoothing;
+  const alpha = smoothingToAlpha(directionSmoothing, deltaTime);
+  const currentMagnitude = magnitude(currentDirection.x, currentDirection.y);
+  const targetMagnitude = magnitude(targetDirection.x, targetDirection.y);
+  const nextMagnitude = lerp(currentMagnitude, targetMagnitude, alpha);
 
-  currentDirection.x = lerp(currentDirection.x, targetDirection.x, alpha);
-  currentDirection.y = lerp(currentDirection.y, targetDirection.y, alpha);
+  if (nextMagnitude <= 0.0001) {
+    currentDirection.x = 0;
+    currentDirection.y = 0;
+    return;
+  }
+
+  const hasCurrentDirection = currentMagnitude > 0.0001;
+  const hasTargetDirection = targetMagnitude > 0.0001;
+  const currentAngle = hasCurrentDirection
+    ? Math.atan2(currentDirection.y, currentDirection.x)
+    : hasTargetDirection
+      ? Math.atan2(targetDirection.y, targetDirection.x)
+      : 0;
+  const targetAngle = hasTargetDirection ? Math.atan2(targetDirection.y, targetDirection.x) : currentAngle;
+  const maxTurnRadians = ((MOVE_CONFIG.maxTurnRateDeg ?? 480) * Math.PI * deltaTime) / 180;
+  let deltaAngle = targetAngle - currentAngle;
+
+  while (deltaAngle > Math.PI) {
+    deltaAngle -= Math.PI * 2;
+  }
+
+  while (deltaAngle < -Math.PI) {
+    deltaAngle += Math.PI * 2;
+  }
+
+  const clampedDelta = clamp(deltaAngle, -maxTurnRadians, maxTurnRadians);
+  const nextAngle = currentAngle + clampedDelta;
+
+  currentDirection.x = Math.cos(nextAngle) * nextMagnitude;
+  currentDirection.y = Math.sin(nextAngle) * nextMagnitude;
 
   if (Math.abs(currentDirection.x) < 0.0001) {
     currentDirection.x = 0;
@@ -85,6 +117,16 @@ export function applyMovementForCell(cell, inputDirection, deltaTime, sensitivit
 
   applyExponentialDrag(cell.vel, MOVE_CONFIG.drag, deltaTime);
 
+  // Split starts with a strong impulse and then decays faster for a short window.
+  if (cell.splitBoostTimer > 0) {
+    cell.splitBoostTimer = Math.max(0, cell.splitBoostTimer - deltaTime);
+    const extraDrag = Math.max(0, cell.splitBoostDecay ?? SPLIT_CONFIG.splitImpulseDecay);
+
+    if (extraDrag > 0) {
+      applyExponentialDrag(cell.vel, extraDrag, deltaTime);
+    }
+  }
+
   const speed = magnitude(cell.vel.x, cell.vel.y);
   const maxSpeed = getMaxSpeedForMass(cell.mass);
 
@@ -96,7 +138,7 @@ export function applyMovementForCell(cell, inputDirection, deltaTime, sensitivit
 
   if (
     magnitude(inputDirection.x, inputDirection.y) <= 0.0001 &&
-    speed < (MOVE_CONFIG.snapVelThreshold ?? MOVE_CONFIG.snapToZeroThreshold ?? 0.01)
+    speed < (MOVE_CONFIG.snapVel ?? MOVE_CONFIG.snapVelThreshold ?? MOVE_CONFIG.snapToZeroThreshold ?? 0.01)
   ) {
     cell.vel.x = 0;
     cell.vel.y = 0;

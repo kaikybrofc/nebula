@@ -9,15 +9,15 @@ export const MOVE_CONFIG = {
   // Nebulous-like movement: quick response + smooth inertia.
   baseSpeed: 420,
   accel: 2600,
-  drag: 5.2,
+  drag: 6.5,
   speedExponent: 0.3,
-  inputSmoothing: 0.35,
+  inputSmoothing: 0.26,
+  dirSmooth: 0.26,
+  maxTurnRateDeg: 480,
   joystickDeadzone: 0.1,
   joystickSmoothing: 0.38,
-  snapVelThreshold: 0.04,
-  visualFollow: 0.3,
-  visualFollowLocal: 0.32,
-  visualFollowRemote: 1,
+  snapVel: 0.02,
+  snapVelThreshold: 0.02,
   referenceMass: 45,
   minSpeed: 80,
   maxSpeed: 420,
@@ -31,6 +31,19 @@ export const NET_CONFIG = {
   tps: 30,
   interpDelayMs: 150,
   maxBufferedSnapshots: 90,
+};
+
+export const NET_VISUAL = {
+  VISUAL_FOLLOW: 0.28,
+  SNAP_ERR_THRESHOLD: 40,
+  SNAP_TELEPORT_THRESHOLD: 220,
+};
+
+export const ARROW_CONFIG = {
+  ARROW_ENABLED: true,
+  ARROW_SMOOTH: 0.35,
+  ARROW_FADE_IN: 0.18,
+  ARROW_FADE_OUT: 0.12,
 };
 
 export const VIEW_RADIUS_BASE = 1100;
@@ -55,31 +68,42 @@ export const COMBAT_CONFIG = {
   spawnProtectionSeconds: 0.5,
 };
 
+export const SPLIT_CONFIG = {
+  minMassToSplit: 36,
+  splitMassRatio: 0.5,
+  maxCells: 16,
+  splitCooldownMs: 250,
+  splitImpulse: 1200,
+  splitImpulseDecay: 10,
+  splitBoostDurationMs: 200,
+  splitSpawnProtectionMs: 500,
+  mergeLockBaseMs: 6000,
+  mergeLockMassFactor: 15,
+  chainSplitAllow: true,
+};
+
+export const EJECT_CONFIG = {
+  minMassToEject: 20,
+  ejectMassCost: 12,
+  ejectPelletMass: 12,
+  ejectCooldownMs: 120,
+  ejectImpulse: 900,
+  ejectSpreadAngleDeg: 6,
+  pelletPickupDelayMs: 300,
+  pelletMaxLifeMs: 12000,
+  ejectWhileMovingBias: true,
+};
+
 export const PLAYER_CONFIG = {
   initialMass: 45,
   minCellMass: 18,
-  maxCells: 16,
   color: '#5fd3bc',
   strokeColor: '#2d9f8a',
-
-  splitGlobalCooldown: 0.42,
-  splitCellCooldown: 0.18,
-  minSplitMass: 40,
-  splitImpulse: 820,
-
-  mergeBaseDelay: 10,
-  mergeMassDelayFactor: 0.05,
-  mergeMaxDelay: 20,
   softCollisionPadding: 0.8,
   softCollisionPush: 0.52,
   softCollisionMaxPush: 18,
   softCollisionDamping: 0.1,
   softCollisionIterations: 2,
-
-  ejectCooldown: 0.12,
-  ejectMass: 6,
-  minMassToEject: 30,
-  ejectImpulse: 730,
 };
 
 export const BOT_CONFIG = {
@@ -112,7 +136,8 @@ export const FOOD_CONFIG = {
 
 export const PELLET_CONFIG = {
   drag: 5,
-  pickupDelay: 0.35,
+  pickupDelay: EJECT_CONFIG.pelletPickupDelayMs / 1000,
+  maxLife: EJECT_CONFIG.pelletMaxLifeMs / 1000,
   color: '#f3ff9a',
   strokeColor: '#d4e274',
 };

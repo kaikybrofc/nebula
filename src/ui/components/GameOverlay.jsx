@@ -75,6 +75,7 @@ export default function GameOverlay({
   const actions = useMemo(
     () => ({
       split: () => controls.triggerSplit(),
+      splitHold: (isActive) => controls.setSplitActive(isActive),
       eject: (isActive) => controls.setEjectActive(isActive),
       direction: (x, y) => controls.setVirtualDirection(x, y),
     }),
@@ -169,7 +170,12 @@ export default function GameOverlay({
 
       {!isMobile && (
         <div className="desktop-actions-anchor">
-          <ActionButtons size={56} onSplit={actions.split} onEjectChange={actions.eject} />
+          <ActionButtons
+            size={56}
+            onSplit={actions.split}
+            onSplitChange={actions.splitHold}
+            onEjectChange={actions.eject}
+          />
         </div>
       )}
 
@@ -177,6 +183,7 @@ export default function GameOverlay({
         <MobileControls
           onDirectionChange={actions.direction}
           onSplit={actions.split}
+          onSplitChange={actions.splitHold}
           onEjectChange={actions.eject}
           compact={isCompactMobile}
         />
