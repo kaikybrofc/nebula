@@ -21,6 +21,9 @@ export const NET_DELTA_ENABLED = true;
 export const NET_DELTA_QUANTIZE_POS = 1;
 export const NET_DELTA_QUANTIZE_RADIUS = 0.1;
 export const NET_DELTA_QUANTIZE_MASS = 0.1;
+export const NET_PREDICTION_ENABLED = true;
+export const NET_RECONCILE_SMOOTHING = 0.2;
+export const NET_SNAP_THRESHOLD = 140;
 
 export const SIM_CONFIG = {
   seed: 133742,

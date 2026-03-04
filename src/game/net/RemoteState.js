@@ -5,6 +5,11 @@ function clamp01(value) {
   return Math.max(0, Math.min(1, value));
 }
 
+function parseAckSeq(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function cloneEntity(entity) {
   return { ...entity };
 }
@@ -120,6 +125,7 @@ function normalizeSnapshot(rawSnapshot) {
   return {
     tick: rawSnapshot.tick,
     selfId: rawSnapshot.selfId ?? null,
+    ackSeq: parseAckSeq(rawSnapshot.ackSeq, 0),
     entities: {
       blobs: rawSnapshot.entities?.blobs ?? [],
       foods: rawSnapshot.entities?.foods ?? [],
@@ -134,6 +140,7 @@ export default class RemoteState {
     this.selfId = null;
     this.latestTick = 0;
     this.latestLeaderboard = [];
+    this.latestAckSeq = -1;
     this.latestEntities = {
       blobs: [],
       foods: [],
@@ -178,7 +185,12 @@ export default class RemoteState {
 
     // Full snapshot resets interpolation history to avoid blending with stale worlds.
     this.snapshotBuffer = [];
-    this.pushReconstructedSnapshot(normalized.tick, normalized.leaderboard, normalized.selfId);
+    this.pushReconstructedSnapshot(
+      normalized.tick,
+      normalized.leaderboard,
+      normalized.selfId,
+      normalized.ackSeq,
+    );
   }
 
   applyDeltaSnapshot(snapshot) {
@@ -195,7 +207,12 @@ export default class RemoteState {
       snapshot.delete?.pellets,
     );
 
-    this.pushReconstructedSnapshot(snapshot.tick, snapshot.leaderboard ?? [], this.selfId);
+    this.pushReconstructedSnapshot(
+      snapshot.tick,
+      snapshot.leaderboard ?? [],
+      this.selfId,
+      parseAckSeq(snapshot.ackSeq, this.latestAckSeq),
+    );
   }
 
   applyDeltaForType(map, createList = [], updateList = [], deleteList = []) {
@@ -223,10 +240,11 @@ export default class RemoteState {
     }
   }
 
-  pushReconstructedSnapshot(tick, leaderboard, selfId) {
+  pushReconstructedSnapshot(tick, leaderboard, selfId, ackSeq) {
     const normalizedSnapshot = {
       tick,
       selfId: selfId ?? this.selfId,
+      ackSeq,
       entities: {
         blobs: mapToArray(this.currentState.blobs),
         foods: mapToArray(this.currentState.foods),
@@ -255,6 +273,7 @@ export default class RemoteState {
     this.latestTick = latestSnapshot.tick;
     this.latestEntities = latestSnapshot.entities;
     this.latestLeaderboard = latestSnapshot.leaderboard;
+    this.latestAckSeq = latestSnapshot.ackSeq ?? this.latestAckSeq;
     this.selfId = latestSnapshot.selfId ?? this.selfId;
   }
 
@@ -344,6 +363,22 @@ export default class RemoteState {
 
   getLatestLeaderboard() {
     return this.latestLeaderboard;
+  }
+
+  getSelfId() {
+    return this.selfId;
+  }
+
+  getLatestAckSeq() {
+    return this.latestAckSeq;
+  }
+
+  getLatestLocalBlobs() {
+    if (!this.selfId) {
+      return [];
+    }
+
+    return this.latestEntities.blobs.filter((blob) => blob.ownerId === this.selfId);
   }
 
   getLatestCounts() {

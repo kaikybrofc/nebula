@@ -2,8 +2,15 @@ import Camera from './Camera';
 import Input from './Input';
 import Renderer from './Renderer';
 import NetClient from './net/NetClient';
+import PredictedState from './net/PredictedState';
 import RemoteState from './net/RemoteState';
-import { GAME_SETTINGS_DEFAULTS, NET_CONFIG, PLAYER_CONFIG, WORLD_CONFIG } from '../shared/config';
+import {
+  GAME_SETTINGS_DEFAULTS,
+  NET_CONFIG,
+  NET_PREDICTION_ENABLED,
+  PLAYER_CONFIG,
+  WORLD_CONFIG,
+} from '../shared/config';
 
 const SEND_RATE = 1 / NET_CONFIG.tps;
 const HUD_UPDATE_INTERVAL = 0.1;
@@ -31,9 +38,10 @@ export default class Game {
     });
 
     this.remoteState = new RemoteState();
+    this.predictedState = new PredictedState();
     this.netClient = new NetClient({
       onSnapshot: (snapshot) => {
-        this.remoteState.applySnapshot(snapshot);
+        this.handleServerSnapshot(snapshot);
       },
     });
 
@@ -100,6 +108,7 @@ export default class Game {
     window.removeEventListener('resize', this.resize);
     this.input.disconnect();
     this.netClient.close();
+    this.predictedState.reset();
   }
 
   resize() {
@@ -126,7 +135,7 @@ export default class Game {
       this.sendTimer -= SEND_RATE;
     }
 
-    this.currentFrame = this.remoteState.getInterpolatedFrame();
+    this.currentFrame = this.buildRenderFrame(this.remoteState.getInterpolatedFrame());
     this.updateCamera(this.currentFrame, frameDelta);
     this.updateFpsCounter(frameDelta);
 
@@ -148,19 +157,66 @@ export default class Game {
     const dx = length > 1 ? scaledX / length : scaledX;
     const dy = length > 1 ? scaledY / length : scaledY;
 
-    this.netClient.sendInput({
+    const inputPayload = {
       seq: this.inputSeq,
       dx,
       dy,
       split: this.input.consumeSplit(),
       eject: this.input.isEjectHeld(),
-    });
+    };
+
+    this.netClient.sendInput(inputPayload);
+
+    if (NET_PREDICTION_ENABLED) {
+      this.predictedState.applyLocalInput(inputPayload, SEND_RATE);
+    }
 
     this.inputSeq += 1;
   }
 
+  handleServerSnapshot(snapshot) {
+    this.remoteState.applySnapshot(snapshot);
+
+    if (!NET_PREDICTION_ENABLED) {
+      return;
+    }
+
+    this.predictedState.reconcile({
+      selfId: this.remoteState.getSelfId(),
+      authoritativeBlobs: this.remoteState.getLatestLocalBlobs(),
+      ackSeq: this.remoteState.getLatestAckSeq(),
+    });
+  }
+
+  buildRenderFrame(interpolatedFrame) {
+    if (!NET_PREDICTION_ENABLED || !this.predictedState.hasReadyState()) {
+      return interpolatedFrame;
+    }
+
+    const selfId = this.remoteState.getSelfId();
+
+    if (!selfId) {
+      return interpolatedFrame;
+    }
+
+    const predictedBlobs = this.predictedState.getRenderBlobs();
+
+    if (predictedBlobs.length === 0) {
+      return interpolatedFrame;
+    }
+
+    const remoteNonLocalBlobs = interpolatedFrame.blobs.filter((blob) => blob.ownerId !== selfId);
+
+    return {
+      ...interpolatedFrame,
+      blobs: [...remoteNonLocalBlobs, ...predictedBlobs],
+    };
+  }
+
   updateCamera(frame, deltaTime) {
-    const local = this.remoteState.getLocalAggregateFromFrame(frame);
+    const local =
+      (NET_PREDICTION_ENABLED ? this.predictedState.getAggregate() : null) ||
+      this.remoteState.getLocalAggregateFromFrame(frame);
 
     if (!local) {
       return;
@@ -199,7 +255,9 @@ export default class Game {
       return;
     }
 
-    const local = this.remoteState.getLatestLocalAggregate();
+    const local =
+      (NET_PREDICTION_ENABLED ? this.predictedState.getAggregate() : null) ||
+      this.remoteState.getLatestLocalAggregate();
     const counts = this.remoteState.getLatestCounts();
 
     this.onStatsChange({

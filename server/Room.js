@@ -59,13 +59,16 @@ export default class Room {
     const client = {
       socket,
       player,
-      input: {
-        seq: 0,
+      inputState: {
+        seq: -1,
         dx: 0,
         dy: 0,
         split: false,
         eject: false,
       },
+      inputQueue: [],
+      lastReceivedSeq: -1,
+      lastProcessedSeq: -1,
       respawnTimer: 0,
       needsFullSnapshot: true,
       lastSentEntities: new Map(),
@@ -91,14 +94,51 @@ export default class Room {
     const length = Math.hypot(dx, dy);
     const normalizedX = length > 1 ? dx / length : dx;
     const normalizedY = length > 1 ? dy / length : dy;
+    const seq = Number(inputPayload.seq) || 0;
 
-    client.input = {
-      seq: Number(inputPayload.seq) || 0,
+    if (seq <= client.lastReceivedSeq) {
+      return;
+    }
+
+    client.lastReceivedSeq = seq;
+    client.inputQueue.push({
+      seq,
       dx: normalizedX,
       dy: normalizedY,
       split: Boolean(inputPayload.split),
       eject: Boolean(inputPayload.eject),
+    });
+
+    // Keep a bounded queue to avoid growth if a client stalls.
+    if (client.inputQueue.length > 120) {
+      client.inputQueue.splice(0, client.inputQueue.length - 120);
+    }
+  }
+
+  consumeInputForTick(client) {
+    const nextInput = {
+      ...client.inputState,
+      split: false,
+      eject: false,
     };
+
+    while (client.inputQueue.length > 0) {
+      const queuedInput = client.inputQueue.shift();
+
+      nextInput.seq = queuedInput.seq;
+      nextInput.dx = queuedInput.dx;
+      nextInput.dy = queuedInput.dy;
+      nextInput.split = nextInput.split || queuedInput.split;
+      nextInput.eject = nextInput.eject || queuedInput.eject;
+    }
+
+    client.inputState = {
+      ...nextInput,
+      split: false,
+      eject: false,
+    };
+
+    return nextInput;
   }
 
   getPlayers() {
@@ -171,29 +211,31 @@ export default class Room {
     for (let index = 0; index < clients.length; index += 1) {
       const client = clients[index];
       const player = client.player;
+      const tickInput = this.consumeInputForTick(client);
 
       if (!player.hasAliveCells()) {
+        client.lastProcessedSeq = Math.max(client.lastProcessedSeq, tickInput.seq);
         continue;
       }
 
       const center = player.getCenterOfMass();
       const target = {
-        x: center.x + client.input.dx * 600,
-        y: center.y + client.input.dy * 600,
+        x: center.x + tickInput.dx * 600,
+        y: center.y + tickInput.dy * 600,
       };
 
       player.updateAim(target, deltaTime);
 
-      if (client.input.split) {
+      if (tickInput.split) {
         player.trySplit(this.world);
-        client.input.split = false;
       }
 
-      if (client.input.eject) {
+      if (tickInput.eject) {
         this.world.addPellets(player.tryEject());
       }
 
       player.updateMovement(target, this.world, deltaTime);
+      client.lastProcessedSeq = Math.max(client.lastProcessedSeq, tickInput.seq);
     }
 
     this.world.updatePellets(deltaTime);
@@ -428,6 +470,20 @@ export default class Room {
     const viewCenter = this.getPlayerViewCenter(client.player);
     const viewRadius = this.getPlayerViewRadius(client.player);
     const visibleBlobs = this.queryVisibleEntities(this.world.blobGrid, viewCenter, viewRadius);
+    const ensuredLocalBlobIds = new Set(visibleBlobs.map((cell) => cell.id));
+    const localCells = client.player.cells;
+
+    for (let index = 0; index < localCells.length; index += 1) {
+      const localCell = localCells[index];
+
+      if (ensuredLocalBlobIds.has(localCell.id)) {
+        continue;
+      }
+
+      visibleBlobs.push(localCell);
+      ensuredLocalBlobIds.add(localCell.id);
+    }
+
     const visibleFoods = this.queryVisibleEntities(this.world.foodGrid, viewCenter, viewRadius);
     const visiblePellets = this.queryVisibleEntities(this.world.pelletGrid, viewCenter, viewRadius);
 
@@ -479,6 +535,7 @@ export default class Room {
       type: 'snapshot_full',
       tick: this.tick,
       selfId: client.player.id,
+      ackSeq: client.lastProcessedSeq,
       entities: {
         blobs: visibleEntities.blobs,
         foods: visibleEntities.foods,
@@ -640,6 +697,7 @@ export default class Room {
       type: 'snapshot_delta',
       tick: this.tick,
       selfId: client.player.id,
+      ackSeq: client.lastProcessedSeq,
       create,
       update,
       delete: remove,
