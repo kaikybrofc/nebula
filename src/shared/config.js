@@ -15,6 +15,9 @@ export const NET_CONFIG = {
   maxBufferedSnapshots: 90,
 };
 
+export const VIEW_RADIUS_BASE = 1100;
+export const VIEW_RADIUS_MULTIPLIER = 1.15;
+
 export const SIM_CONFIG = {
   seed: 133742,
   maxFrameDelta: 0.1,

@@ -1,13 +1,16 @@
 import World from '../src/game/World.js';
 import Player from '../src/game/entities/Player.js';
 import {
+  CAMERA_CONFIG,
   COMBAT_CONFIG,
   PELLET_CONFIG,
   PLAYER_CONFIG,
   SIM_CONFIG,
+  VIEW_RADIUS_BASE,
+  VIEW_RADIUS_MULTIPLIER,
 } from '../src/shared/config.js';
 import SeededRandom from '../src/shared/random.js';
-import { distanceSquaredPos } from '../src/shared/utils.js';
+import { clamp, distanceSquaredPos } from '../src/shared/utils.js';
 
 export default class Room {
   constructor() {
@@ -350,59 +353,128 @@ export default class Room {
     return leaderboard;
   }
 
-  buildBaseSnapshot() {
-    const cells = this.getAllCells();
+  getPlayerViewCenter(player) {
+    if (!player.hasAliveCells()) {
+      return {
+        x: this.world.width * 0.5,
+        y: this.world.height * 0.5,
+      };
+    }
+
+    return player.getCenterOfMass();
+  }
+
+  getPlayerViewRadius(player) {
+    if (!player.hasAliveCells()) {
+      return VIEW_RADIUS_BASE;
+    }
+
+    const totalMass = Math.max(1, player.getTotalMass());
+    const massScale = Math.pow(CAMERA_CONFIG.referenceMass / totalMass, CAMERA_CONFIG.zoomExponent);
+    const zoom = clamp(
+      CAMERA_CONFIG.baseZoom * massScale,
+      CAMERA_CONFIG.minZoom,
+      CAMERA_CONFIG.maxZoom,
+    );
+
+    return (VIEW_RADIUS_BASE / Math.max(0.01, zoom)) * VIEW_RADIUS_MULTIPLIER;
+  }
+
+  isInsideView(entity, center, viewRadius) {
+    const dx = entity.pos.x - center.x;
+    const dy = entity.pos.y - center.y;
+    return dx * dx + dy * dy <= viewRadius * viewRadius;
+  }
+
+  queryVisibleEntities(grid, center, viewRadius) {
+    const nearby = grid.queryCircle(center.x, center.y, viewRadius);
+    const visible = [];
+
+    for (let index = 0; index < nearby.length; index += 1) {
+      const entity = nearby[index];
+
+      if (!this.isInsideView(entity, center, viewRadius)) {
+        continue;
+      }
+
+      visible.push(entity);
+    }
+
+    return visible;
+  }
+
+  serializeBlob(cell) {
+    return {
+      id: cell.id,
+      ownerId: cell.ownerId,
+      x: cell.pos.x,
+      y: cell.pos.y,
+      r: cell.radius,
+      mass: cell.mass,
+      nickname: cell.nickname,
+      color: cell.color,
+      stroke: cell.strokeColor,
+    };
+  }
+
+  serializeFood(food) {
+    return {
+      id: food.id,
+      x: food.pos.x,
+      y: food.pos.y,
+      r: food.radius,
+      color: food.color,
+    };
+  }
+
+  serializePellet(pellet) {
+    return {
+      id: pellet.id,
+      ownerId: pellet.ownerId,
+      x: pellet.pos.x,
+      y: pellet.pos.y,
+      r: pellet.radius,
+      color: pellet.color,
+      stroke: pellet.strokeColor,
+    };
+  }
+
+  buildSnapshotForClient(client, leaderboard) {
+    const viewCenter = this.getPlayerViewCenter(client.player);
+    const viewRadius = this.getPlayerViewRadius(client.player);
+    const visibleBlobs = this.queryVisibleEntities(this.world.blobGrid, viewCenter, viewRadius);
+    const visibleFoods = this.queryVisibleEntities(this.world.foodGrid, viewCenter, viewRadius);
+    const visiblePellets = this.queryVisibleEntities(this.world.pelletGrid, viewCenter, viewRadius);
 
     return {
       type: 'snapshot',
       tick: this.tick,
+      selfId: client.player.id,
       entities: {
-        blobs: cells.map((cell) => ({
-          id: cell.id,
-          ownerId: cell.ownerId,
-          x: cell.pos.x,
-          y: cell.pos.y,
-          r: cell.radius,
-          mass: cell.mass,
-          nickname: cell.nickname,
-          color: cell.color,
-          stroke: cell.strokeColor,
-        })),
-        foods: this.world.food.map((food) => ({
-          id: food.id,
-          x: food.pos.x,
-          y: food.pos.y,
-          r: food.radius,
-          color: food.color,
-        })),
-        pellets: this.world.pellets.map((pellet) => ({
-          id: pellet.id,
-          ownerId: pellet.ownerId,
-          x: pellet.pos.x,
-          y: pellet.pos.y,
-          r: pellet.radius,
-          color: pellet.color,
-          stroke: pellet.strokeColor,
-        })),
+        blobs: visibleBlobs.map((cell) => this.serializeBlob(cell)),
+        foods: visibleFoods.map((food) => this.serializeFood(food)),
+        pellets: visiblePellets.map((pellet) => this.serializePellet(pellet)),
       },
-      leaderboard: this.buildLeaderboard(),
+      leaderboard,
     };
   }
 
   broadcastSnapshots() {
-    const baseSnapshot = this.buildBaseSnapshot();
+    if (this.clients.size === 0) {
+      return;
+    }
+
+    // Rebuild once so visibility queries always use the latest post-step state.
+    this.world.rebuildSpatialIndexes(this.getAllCells());
+    const leaderboard = this.buildLeaderboard();
 
     for (const client of this.clients.values()) {
       if (client.socket.readyState !== 1) {
         continue;
       }
 
-      client.socket.send(
-        JSON.stringify({
-          ...baseSnapshot,
-          selfId: client.player.id,
-        }),
-      );
+      const snapshot = this.buildSnapshotForClient(client, leaderboard);
+      client.socket.send(JSON.stringify(snapshot));
     }
   }
 }
