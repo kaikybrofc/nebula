@@ -96,9 +96,10 @@ export default class Game {
       return;
     }
 
+    const scale = length > 1 ? 1 / length : 1;
     this.virtualDirectionActive = true;
-    this.virtualDirection.x = nextX / length;
-    this.virtualDirection.y = nextY / length;
+    this.virtualDirection.x = nextX * scale;
+    this.virtualDirection.y = nextY * scale;
   }
 
   triggerSplit() {

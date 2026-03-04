@@ -224,13 +224,13 @@ export default class Room {
         continue;
       }
 
-      const center = player.getCenterOfMass();
-      const target = {
-        x: center.x + tickInput.dx * 600,
-        y: center.y + tickInput.dy * 600,
-      };
-
-      player.updateAim(target, deltaTime);
+      player.updateInputDirection(
+        {
+          x: tickInput.dx,
+          y: tickInput.dy,
+        },
+        deltaTime,
+      );
 
       if (tickInput.split) {
         player.trySplit(this.world);
@@ -240,7 +240,7 @@ export default class Room {
         this.world.addPellets(player.tryEject());
       }
 
-      player.updateMovement(target, this.world, deltaTime);
+      player.updateMovementFromInput(this.world, deltaTime);
       client.lastProcessedSeq = Math.max(client.lastProcessedSeq, tickInput.seq);
     }
 

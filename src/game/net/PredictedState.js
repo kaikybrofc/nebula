@@ -7,13 +7,16 @@ import {
   WORLD_CONFIG,
 } from '../../shared/config';
 import {
-  applyExponentialDrag,
   clamp,
   lerp,
-  limitVector,
   massToRadius,
-  normalize,
 } from '../../shared/utils';
+import {
+  applyMovementForCell,
+  normalizeDesiredDirection,
+  smoothAim,
+  smoothDirection,
+} from '../movement.js';
 
 function cloneCell(cell) {
   return {
@@ -39,6 +42,8 @@ export default class PredictedState {
     this.cells = [];
     this.pendingInputs = [];
     this.nextTempCellId = 1;
+    this.desiredDir = { x: 0, y: 0 };
+    this.inputDir = { x: 0, y: 0 };
     this.aim = { x: 1, y: 0 };
     this.splitCooldown = 0;
     this.ejectCooldown = 0;
@@ -172,14 +177,7 @@ export default class PredictedState {
     }
 
     this.tickTimers(deltaTime);
-
-    const center = this.getCenterOfMass();
-    const target = {
-      x: center.x + input.dx * 600,
-      y: center.y + input.dy * 600,
-    };
-
-    this.updateAim(target, deltaTime);
+    this.updateInputDirection(input, deltaTime);
 
     if (input.split) {
       this.trySplit();
@@ -189,7 +187,7 @@ export default class PredictedState {
       this.tryEject();
     }
 
-    this.updateMovement(target, deltaTime);
+    this.updateMovement(deltaTime);
   }
 
   tickTimers(deltaTime) {
@@ -204,50 +202,25 @@ export default class PredictedState {
     }
   }
 
-  updateAim(targetWorld, deltaTime) {
-    const center = this.getCenterOfMass();
-    const dx = targetWorld.x - center.x;
-    const dy = targetWorld.y - center.y;
-    const direction = normalize(dx, dy, this.aim.x, this.aim.y);
-    const alpha = 1 - Math.exp(-PLAYER_CONFIG.aimSharpness * deltaTime);
+  updateInputDirection(rawInput, deltaTime) {
+    const desired = normalizeDesiredDirection(rawInput.dx, rawInput.dy);
 
-    this.aim.x = lerp(this.aim.x, direction.x, alpha);
-    this.aim.y = lerp(this.aim.y, direction.y, alpha);
+    this.desiredDir.x = desired.x;
+    this.desiredDir.y = desired.y;
 
-    const normalizedAim = normalize(this.aim.x, this.aim.y, direction.x, direction.y);
-    this.aim.x = normalizedAim.x;
-    this.aim.y = normalizedAim.y;
+    smoothDirection(this.inputDir, this.desiredDir, deltaTime);
+    smoothAim(this.aim, this.inputDir, deltaTime);
   }
 
-  updateMovement(targetWorld, deltaTime) {
+  updateMovement(deltaTime) {
     for (let index = 0; index < this.cells.length; index += 1) {
       const cell = this.cells[index];
-      const dx = targetWorld.x - cell.pos.x;
-      const dy = targetWorld.y - cell.pos.y;
-      const distanceToMouse = Math.hypot(dx, dy);
-
-      this.applySteering(cell, distanceToMouse, deltaTime);
-      applyExponentialDrag(cell.vel, PLAYER_CONFIG.friction, deltaTime);
+      applyMovementForCell(cell, this.inputDir, deltaTime, 1);
 
       cell.pos.x += cell.vel.x * deltaTime;
       cell.pos.y += cell.vel.y * deltaTime;
       this.clampCell(cell);
     }
-  }
-
-  applySteering(cell, distanceToMouse, deltaTime) {
-    const throttle = clamp(distanceToMouse / PLAYER_CONFIG.stopDistance, 0, 1);
-    const moveDirection = normalize(this.aim.x, this.aim.y);
-
-    cell.vel.x += moveDirection.x * PLAYER_CONFIG.acceleration * throttle * deltaTime;
-    cell.vel.y += moveDirection.y * PLAYER_CONFIG.acceleration * throttle * deltaTime;
-
-    limitVector(cell.vel, this.getCellMaxSpeed(cell.mass));
-  }
-
-  getCellMaxSpeed(mass) {
-    const scale = Math.pow(PLAYER_CONFIG.referenceMass / mass, PLAYER_CONFIG.speedExponent);
-    return clamp(PLAYER_CONFIG.baseSpeed * scale, PLAYER_CONFIG.minSpeed, PLAYER_CONFIG.maxSpeed);
   }
 
   getMergeDelay(mass) {

@@ -1,11 +1,6 @@
 import { COMBAT_CONFIG, PLAYER_CONFIG } from '../../shared/config.js';
-import {
-  clamp,
-  createEntityId,
-  limitVector,
-  massToRadius,
-  normalize,
-} from '../../shared/utils.js';
+import { createEntityId, massToRadius } from '../../shared/utils.js';
+import { applyMovementForCell, getMaxSpeedForMass } from '../movement.js';
 
 export default class Blob {
   constructor({
@@ -49,18 +44,10 @@ export default class Blob {
   }
 
   getMaxSpeed() {
-    const scale = Math.pow(PLAYER_CONFIG.referenceMass / this.mass, PLAYER_CONFIG.speedExponent);
-    return clamp(PLAYER_CONFIG.baseSpeed * scale, PLAYER_CONFIG.minSpeed, PLAYER_CONFIG.maxSpeed);
+    return getMaxSpeedForMass(this.mass);
   }
 
-  applySteering(aim, distanceToMouse, deltaTime, sensitivity) {
-    const acceleration = PLAYER_CONFIG.acceleration * sensitivity;
-    const throttle = clamp(distanceToMouse / PLAYER_CONFIG.stopDistance, 0, 1);
-    const moveDirection = normalize(aim.x, aim.y);
-
-    this.vel.x += moveDirection.x * acceleration * throttle * deltaTime;
-    this.vel.y += moveDirection.y * acceleration * throttle * deltaTime;
-
-    limitVector(this.vel, this.getMaxSpeed());
+  applySteering(inputDirection, deltaTime, sensitivity = 1) {
+    applyMovementForCell(this, inputDirection, deltaTime, sensitivity);
   }
 }

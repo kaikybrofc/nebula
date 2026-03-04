@@ -5,6 +5,21 @@ export const WORLD_CONFIG = {
   foodSpawnMargin: 24,
 };
 
+export const MOVE_CONFIG = {
+  // Nebulous-like movement: responsive acceleration with smooth deceleration.
+  baseSpeed: 1320,
+  accel: 2000,
+  drag: 2.35,
+  speedExponent: 0.3,
+  inputSmoothing: 0.38,
+  joystickDeadzone: 0.1,
+  joystickSmoothing: 0.35,
+  snapToZeroThreshold: 8,
+  referenceMass: 45,
+  minSpeed: 90,
+  maxSpeed: 470,
+};
+
 export const GRID_CONFIG = {
   cellSize: 96,
 };
@@ -43,17 +58,6 @@ export const PLAYER_CONFIG = {
   maxCells: 16,
   color: '#5fd3bc',
   strokeColor: '#2d9f8a',
-
-  // Nebulous-like steering: acceleration + drag + mass-based max speed.
-  acceleration: 1800,
-  friction: 3.8,
-  stopDistance: 80,
-  aimSharpness: 12,
-  referenceMass: 45,
-  baseSpeed: 430,
-  minSpeed: 85,
-  maxSpeed: 460,
-  speedExponent: 0.38,
 
   splitGlobalCooldown: 0.42,
   splitCellCooldown: 0.18,

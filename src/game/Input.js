@@ -1,3 +1,6 @@
+import { MOVE_CONFIG } from '../shared/config';
+import { clamp } from '../shared/utils';
+
 export default class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -80,14 +83,22 @@ export default class Input {
     const dx = this.mouseX - centerX;
     const dy = this.mouseY - centerY;
     const length = Math.hypot(dx, dy);
+    const maxDistance = Math.max(1, Math.min(rect.width, rect.height) * 0.5);
+    const deadzonePixels = Math.max(5, maxDistance * MOVE_CONFIG.joystickDeadzone * 0.22);
 
-    if (length < 4) {
+    if (length <= deadzonePixels) {
       return { x: 0, y: 0 };
     }
 
+    const normalizedMagnitude = clamp(
+      (Math.min(maxDistance, length) - deadzonePixels) / (maxDistance - deadzonePixels),
+      0,
+      1,
+    );
+
     return {
-      x: dx / length,
-      y: dy / length,
+      x: (dx / length) * normalizedMagnitude,
+      y: (dy / length) * normalizedMagnitude,
     };
   }
 }

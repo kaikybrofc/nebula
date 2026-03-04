@@ -1,15 +1,12 @@
 import { PLAYER_CONFIG } from '../../shared/config.js';
 import {
-  applyExponentialDrag,
   clamp,
   distanceSquaredPos,
-  lerp,
-  magnitude,
   massToRadius,
-  normalize,
 } from '../../shared/utils.js';
 import Blob from './Blob.js';
 import Pellet from './Pellet.js';
+import { normalizeDesiredDirection, smoothAim, smoothDirection } from '../movement.js';
 
 export default class Player {
   constructor({
@@ -29,6 +26,8 @@ export default class Player {
     this.cells = [];
     this.spawnSingleCell({ x, y, mass: initialMass });
 
+    this.desiredDir = { x: 0, y: 0 };
+    this.inputDir = { x: 0, y: 0 };
     this.aim = { x: 1, y: 0 };
     this.splitCooldown = 0;
     this.ejectCooldown = 0;
@@ -77,35 +76,37 @@ export default class Player {
     }
   }
 
+  updateInputDirection(rawDirection, deltaTime) {
+    const nextDesiredDir = normalizeDesiredDirection(rawDirection.x, rawDirection.y);
+    this.desiredDir.x = nextDesiredDir.x;
+    this.desiredDir.y = nextDesiredDir.y;
+
+    smoothDirection(this.inputDir, this.desiredDir, deltaTime);
+    smoothAim(this.aim, this.inputDir, deltaTime);
+  }
+
   updateAim(targetWorld, deltaTime) {
     const center = this.getCenterOfMass();
     const dx = targetWorld.x - center.x;
     const dy = targetWorld.y - center.y;
-    const direction = normalize(dx, dy, this.aim.x, this.aim.y);
-    const alpha = 1 - Math.exp(-PLAYER_CONFIG.aimSharpness * deltaTime);
-
-    this.aim.x = lerp(this.aim.x, direction.x, alpha);
-    this.aim.y = lerp(this.aim.y, direction.y, alpha);
-
-    const normalizedAim = normalize(this.aim.x, this.aim.y, direction.x, direction.y);
-    this.aim.x = normalizedAim.x;
-    this.aim.y = normalizedAim.y;
+    this.updateInputDirection({ x: dx, y: dy }, deltaTime);
   }
 
-  updateMovement(targetWorld, world, deltaTime) {
+  updateMovementFromInput(world, deltaTime) {
     for (let index = 0; index < this.cells.length; index += 1) {
       const cell = this.cells[index];
-      const dx = targetWorld.x - cell.pos.x;
-      const dy = targetWorld.y - cell.pos.y;
-      const distanceToMouse = magnitude(dx, dy);
 
-      cell.applySteering(this.aim, distanceToMouse, deltaTime, this.sensitivity);
-      applyExponentialDrag(cell.vel, PLAYER_CONFIG.friction, deltaTime);
+      cell.applySteering(this.inputDir, deltaTime, this.sensitivity);
 
       cell.pos.x += cell.vel.x * deltaTime;
       cell.pos.y += cell.vel.y * deltaTime;
       world.clampEntity(cell);
     }
+  }
+
+  updateMovement(targetWorld, world, deltaTime) {
+    this.updateAim(targetWorld, deltaTime);
+    this.updateMovementFromInput(world, deltaTime);
   }
 
   getMergeDelay(mass) {
