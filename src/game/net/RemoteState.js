@@ -22,6 +22,16 @@ function parseServerTimeMs(value, tick) {
   return tick * (1000 / NET_CONFIG.tps);
 }
 
+function parseSimTps(value, fallback = NET_CONFIG.tps) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
 function cloneEntity(entity) {
   return { ...entity };
 }
@@ -137,6 +147,7 @@ function normalizeSnapshot(rawSnapshot) {
   return {
     tick: rawSnapshot.tick,
     serverTimeMs: parseServerTimeMs(rawSnapshot.serverTimeMs, rawSnapshot.tick),
+    simTps: parseSimTps(rawSnapshot.simTps, NET_CONFIG.tps),
     selfId: rawSnapshot.selfId ?? null,
     ackSeq: parseAckSeq(rawSnapshot.ackSeq, -1),
     entities: {
@@ -173,6 +184,8 @@ export default class RemoteState {
 
     // Approximation of (clientNowMs - serverTimeMs) for converting local clock to server clock.
     this.clockOffsetMs = null;
+    this.serverSimTps = NET_CONFIG.tps;
+    this.serverStepSeconds = 1 / Math.max(1, NET_CONFIG.tps);
   }
 
   applySnapshot(snapshot) {
@@ -193,6 +206,8 @@ export default class RemoteState {
   applyFullSnapshot(snapshot) {
     const normalized = normalizeSnapshot(snapshot);
     this.updateClockOffset(normalized.serverTimeMs);
+    this.serverSimTps = normalized.simTps;
+    this.serverStepSeconds = 1 / Math.max(1, this.serverSimTps);
 
     this.selfId = normalized.selfId;
     this.currentState = {
@@ -227,7 +242,10 @@ export default class RemoteState {
     );
 
     const serverTimeMs = parseServerTimeMs(snapshot.serverTimeMs, snapshot.tick);
+    const simTps = parseSimTps(snapshot.simTps, this.serverSimTps);
     this.updateClockOffset(serverTimeMs);
+    this.serverSimTps = simTps;
+    this.serverStepSeconds = 1 / Math.max(1, this.serverSimTps);
 
     this.pushReconstructedSnapshot(
       snapshot.tick,
@@ -463,5 +481,9 @@ export default class RemoteState {
 
     const rank = this.latestLeaderboard.findIndex((entry) => entry.id === this.selfId);
     return rank >= 0 ? rank + 1 : 1;
+  }
+
+  getServerStepSeconds() {
+    return this.serverStepSeconds;
   }
 }

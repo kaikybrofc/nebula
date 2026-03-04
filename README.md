@@ -9,6 +9,13 @@ Jogo de navegador inspirado em Nebulous.io, com UI em React e engine em Canvas.
 - `npm run build`: build de producao
 - `npm run deploy`: deploy completo (frontend + reload Nginx + restart backend WS)
 
+### Taxa de processamento do servidor
+
+- `SERVER_TPS`: taxa de simulacao autoritativa, recomendado `30` (ou `60` se CPU permitir)
+- `SNAPSHOT_HZ`: taxa de envio de snapshots, recomendado `20-30`
+- `SIM_LOOP_RATE`: frequencia do loop interno do acumulador (padrao recomendado `120`)
+- `SIM_TICK_RATE` e `TICK_RATE`: nomes legados aceitos como fallback (clampados para faixa segura)
+
 ## Multiplayer local (MVP)
 
 Em dois terminais:

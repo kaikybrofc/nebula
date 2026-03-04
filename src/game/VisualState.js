@@ -40,8 +40,8 @@ export default class VisualState {
     }
 
     const seenBlobIds = new Set();
-    const localFollow = NET_VISUAL.VISUAL_FOLLOW ?? 0.28;
-    const remoteFollow = 1;
+    const localFollow = NET_VISUAL.VISUAL_FOLLOW_LOCAL ?? NET_VISUAL.VISUAL_FOLLOW ?? 0.14;
+    const remoteFollow = NET_VISUAL.VISUAL_FOLLOW_REMOTE ?? 1;
     const localAlpha = computeFollowAlpha(localFollow, deltaTime);
     const remoteAlpha = computeFollowAlpha(remoteFollow, deltaTime);
     const nextBlobs = [];

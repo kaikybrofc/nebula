@@ -288,6 +288,8 @@ export default class Game {
       return;
     }
 
+    this.predictedState.setSimStepSeconds(this.remoteState.getServerStepSeconds());
+
     this.predictedState.reconcile({
       selfId: this.remoteState.getSelfId(),
       authoritativeBlobs: this.remoteState.getLatestLocalBlobs(),

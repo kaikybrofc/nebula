@@ -1,4 +1,5 @@
 import {
+  NET_CONFIG,
   NET_VISUAL,
   NET_PREDICTION_ENABLED,
   PLAYER_CONFIG,
@@ -51,10 +52,21 @@ export default class PredictedState {
     this.nickname = null;
     this.color = PLAYER_CONFIG.color;
     this.stroke = PLAYER_CONFIG.strokeColor;
+    this.simStepSeconds = 1 / Math.max(1, NET_CONFIG.tps);
   }
 
   hasReadyState() {
     return NET_PREDICTION_ENABLED && Boolean(this.selfId) && this.cells.length > 0;
+  }
+
+  setSimStepSeconds(nextStepSeconds) {
+    const parsed = Number(nextStepSeconds);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return;
+    }
+
+    this.simStepSeconds = parsed;
   }
 
   reconcile({ selfId, authoritativeBlobs, ackSeq }) {
@@ -80,7 +92,7 @@ export default class PredictedState {
 
     for (let index = 0; index < pending.length; index += 1) {
       const input = pending[index];
-      this.simulateInput(input, input.dt || 0);
+      this.simulateInputInterval(input, input.dt || this.simStepSeconds);
     }
   }
 
@@ -99,11 +111,12 @@ export default class PredictedState {
     };
 
     this.pendingInputs.push(normalizedInput);
-    this.simulateInput(normalizedInput, deltaTime);
+    this.simulateInputInterval(normalizedInput, deltaTime);
   }
 
   applyAuthoritativeState(selfId, authoritativeBlobs, previousById) {
     this.selfId = selfId;
+    const microCorrectionSq = (NET_VISUAL.MICRO_ERR_THRESHOLD ?? 16) ** 2;
     const softCorrectionSq = (NET_VISUAL.SNAP_ERR_THRESHOLD ?? 40) ** 2;
     const teleportCorrectionSq = (NET_VISUAL.SNAP_TELEPORT_THRESHOLD ?? 220) ** 2;
 
@@ -122,17 +135,21 @@ export default class PredictedState {
           y: blob.y,
         });
       const shouldKeepVelocity = previous && errorSq <= teleportCorrectionSq;
+      const isMicroCorrection = previous && errorSq <= microCorrectionSq;
       const isSmallCorrection = previous && errorSq <= softCorrectionSq;
       const isMediumCorrection = previous && errorSq > softCorrectionSq && errorSq < teleportCorrectionSq;
       let simX = blob.x;
       let simY = blob.y;
 
-      if (isSmallCorrection) {
-        simX = lerp(previous.pos.x, blob.x, 0.35);
-        simY = lerp(previous.pos.y, blob.y, 0.35);
+      if (isMicroCorrection) {
+        simX = previous.pos.x;
+        simY = previous.pos.y;
+      } else if (isSmallCorrection) {
+        simX = lerp(previous.pos.x, blob.x, 0.2);
+        simY = lerp(previous.pos.y, blob.y, 0.2);
       } else if (isMediumCorrection) {
-        simX = lerp(previous.pos.x, blob.x, 0.72);
-        simY = lerp(previous.pos.y, blob.y, 0.72);
+        simX = lerp(previous.pos.x, blob.x, 0.55);
+        simY = lerp(previous.pos.y, blob.y, 0.55);
       }
 
       return {
@@ -159,6 +176,25 @@ export default class PredictedState {
 
     this.lastAckSeq = Math.max(this.lastAckSeq, ackSeq);
     this.pendingInputs = this.pendingInputs.filter((input) => input.seq > this.lastAckSeq);
+  }
+
+  simulateInputInterval(input, intervalSeconds) {
+    const totalDuration = Math.max(0, Number(intervalSeconds) || 0);
+
+    if (totalDuration <= 0) {
+      return;
+    }
+
+    const fixedStep = Math.max(0.0005, this.simStepSeconds || totalDuration);
+    let remaining = totalDuration;
+    let guard = 0;
+
+    while (remaining > 0.000001 && guard < 256) {
+      const step = Math.min(fixedStep, remaining);
+      this.simulateInput(input, step);
+      remaining -= step;
+      guard += 1;
+    }
   }
 
   simulateInput(input, deltaTime) {

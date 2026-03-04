@@ -29,14 +29,15 @@ export const GRID_CONFIG = {
 
 export const NET_CONFIG = {
   tps: 30,
-  interpDelayMs: 150,
+  interpDelayMs: 120,
   maxBufferedSnapshots: 90,
 };
 
 export const NET_VISUAL = {
-  VISUAL_FOLLOW: 0.28,
-  SNAP_ERR_THRESHOLD: 40,
-  SNAP_TELEPORT_THRESHOLD: 220,
+  VISUAL_FOLLOW_LOCAL: 0.14,
+  VISUAL_FOLLOW_REMOTE: 1,
+  SNAP_ERR_THRESHOLD: 32,
+  SNAP_TELEPORT_THRESHOLD: 320,
 };
 
 export const ARROW_CONFIG = {
@@ -148,8 +149,8 @@ export const CAMERA_CONFIG = {
   maxZoom: 1.35,
   referenceMass: 45,
   zoomExponent: 0.13,
-  followSmoothing: 0.22,
-  zoomSmoothing: 0.18,
+  followSmoothing: 0.3,
+  zoomSmoothing: 0.24,
   followSharpness: 8.5,
   zoomSharpness: 5,
 };

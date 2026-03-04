@@ -35,11 +35,13 @@ export default class Room {
     this.world = new World(this.rng);
     this.world.seedFood();
 
+    this.simTps = Math.max(1, tickRate);
     this.tick = 0;
-    this.tickDurationMs = 1000 / Math.max(1, tickRate);
+    this.tickDurationMs = 1000 / this.simTps;
     this.nextPlayerId = 1;
 
     this.clients = new Map();
+    this.inputMessagesAccepted = 0;
   }
 
   getServerTimeMs() {
@@ -65,14 +67,14 @@ export default class Room {
     const client = {
       socket,
       player,
-      inputState: {
+      latestInput: {
         seq: -1,
         dx: 0,
         dy: 0,
         split: false,
         eject: false,
       },
-      inputQueue: [],
+      pendingSplitEvents: [],
       lastReceivedSeq: -1,
       lastProcessedSeq: -1,
       respawnTimer: 0,
@@ -106,45 +108,47 @@ export default class Room {
       return;
     }
 
+    const splitHeld = Boolean(inputPayload.split);
+    const ejectHeld = Boolean(inputPayload.eject);
+    const previousSplitHeld = Boolean(client.latestInput.split);
+
+    if (splitHeld && !previousSplitHeld) {
+      client.pendingSplitEvents.push(seq);
+
+      if (client.pendingSplitEvents.length > 60) {
+        client.pendingSplitEvents.splice(0, client.pendingSplitEvents.length - 60);
+      }
+    }
+
     client.lastReceivedSeq = seq;
-    client.inputQueue.push({
+    client.latestInput = {
       seq,
       dx: normalizedX,
       dy: normalizedY,
-      split: Boolean(inputPayload.split),
-      eject: Boolean(inputPayload.eject),
-    });
-
-    // Keep a bounded queue to avoid growth if a client stalls.
-    if (client.inputQueue.length > 120) {
-      client.inputQueue.splice(0, client.inputQueue.length - 120);
-    }
+      split: splitHeld,
+      eject: ejectHeld,
+    };
+    this.inputMessagesAccepted += 1;
   }
 
   consumeInputForTick(client) {
     const nextInput = {
-      ...client.inputState,
+      ...client.latestInput,
       split: false,
-      eject: false,
     };
 
-    while (client.inputQueue.length > 0) {
-      const queuedInput = client.inputQueue.shift();
-
-      nextInput.seq = queuedInput.seq;
-      nextInput.dx = queuedInput.dx;
-      nextInput.dy = queuedInput.dy;
-      nextInput.split = nextInput.split || queuedInput.split;
-      nextInput.eject = nextInput.eject || queuedInput.eject;
+    if (client.pendingSplitEvents.length > 0) {
+      nextInput.split = true;
+      client.pendingSplitEvents.shift();
     }
 
-    client.inputState = {
-      ...nextInput,
-      split: false,
-      eject: false,
-    };
-
     return nextInput;
+  }
+
+  consumeAcceptedInputCount() {
+    const count = this.inputMessagesAccepted;
+    this.inputMessagesAccepted = 0;
+    return count;
   }
 
   getPlayers() {
@@ -539,6 +543,7 @@ export default class Room {
       type: 'snapshot_full',
       tick: this.tick,
       serverTimeMs: this.getServerTimeMs(),
+      simTps: this.simTps,
       selfId: client.player.id,
       ackSeq: client.lastProcessedSeq,
       entities: {
@@ -702,6 +707,7 @@ export default class Room {
       type: 'snapshot_delta',
       tick: this.tick,
       serverTimeMs: this.getServerTimeMs(),
+      simTps: this.simTps,
       selfId: client.player.id,
       ackSeq: client.lastProcessedSeq,
       create,
