@@ -1,0 +1,28 @@
+function formatMass(mass) {
+  return Math.floor(mass).toLocaleString('pt-BR');
+}
+
+export default function Leaderboard({ entries = [], selfId }) {
+  return (
+    <section className="ui-card leaderboard-panel" aria-label="Leaderboard">
+      <header className="leaderboard-header">Leaderboard</header>
+
+      <ol className="leaderboard-list">
+        {entries.slice(0, 10).map((entry, index) => {
+          const isSelf = selfId && entry.id === selfId;
+
+          return (
+            <li
+              key={entry.id}
+              className={`leaderboard-item ${isSelf ? 'is-self' : ''}`.trim()}
+            >
+              <span className="leaderboard-rank">{index + 1}</span>
+              <span className="leaderboard-name">{entry.name}</span>
+              <span className="leaderboard-mass">{formatMass(entry.mass)}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}

@@ -1,9 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import './App.css';
 import GameCanvas from './ui/components/GameCanvas';
+import GameOverlay from './ui/components/GameOverlay';
 import Home from './ui/Home';
-import Hud from './ui/Hud';
-import { GAME_SETTINGS_DEFAULTS, PLAYER_CONFIG } from './shared/config';
+import { GAME_SETTINGS_DEFAULTS, PLAYER_CONFIG, WORLD_CONFIG } from './shared/config';
 import { massToRadius } from './shared/utils';
 
 const initialStats = {
@@ -16,6 +16,11 @@ const initialStats = {
   score: 0,
   leaderboard: [],
   playerRank: 1,
+  selfId: null,
+  playerX: WORLD_CONFIG.width * 0.5,
+  playerY: WORLD_CONFIG.height * 0.5,
+  worldWidth: WORLD_CONFIG.width,
+  worldHeight: WORLD_CONFIG.height,
 };
 
 export default function App() {
@@ -23,6 +28,7 @@ export default function App() {
   const [nickname, setNickname] = useState('Explorer');
   const [stats, setStats] = useState(initialStats);
   const [settings, setSettings] = useState(GAME_SETTINGS_DEFAULTS);
+  const gameControlsRef = useRef(null);
 
   const handlePlay = useCallback((nextNickname) => {
     setNickname(nextNickname);
@@ -41,6 +47,31 @@ export default function App() {
     }));
   }, []);
 
+  const handleGameReady = useCallback((controls) => {
+    gameControlsRef.current = controls;
+  }, []);
+
+  const controls = useMemo(
+    () => ({
+      triggerSplit: () => {
+        if (gameControlsRef.current) {
+          gameControlsRef.current.triggerSplit();
+        }
+      },
+      setEjectActive: (isActive) => {
+        if (gameControlsRef.current) {
+          gameControlsRef.current.setEjectActive(isActive);
+        }
+      },
+      setVirtualDirection: (x, y) => {
+        if (gameControlsRef.current) {
+          gameControlsRef.current.setVirtualDirection(x, y);
+        }
+      },
+    }),
+    [],
+  );
+
   return (
     <main className="app-shell">
       {!isPlaying && <Home onPlay={handlePlay} />}
@@ -51,12 +82,13 @@ export default function App() {
             nickname={nickname}
             onStatsChange={handleStatsChange}
             settings={settings}
+            onReady={handleGameReady}
           />
-          <Hud
-            nickname={nickname}
+          <GameOverlay
             stats={stats}
             settings={settings}
             onSettingsChange={handleSettingsChange}
+            controls={controls}
           />
         </>
       )}

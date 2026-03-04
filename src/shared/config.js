@@ -130,4 +130,9 @@ export const RENDER_CONFIG = {
 export const GAME_SETTINGS_DEFAULTS = {
   sensitivity: 1,
   zoom: 1,
+  graphicsQuality: 1,
+  showLeaderboard: true,
+  showMinimap: true,
+  showFps: true,
+  soundEnabled: true,
 };

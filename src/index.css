@@ -1,12 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  --text-main: #edf7ff;
-  --text-muted: #a9c3d3;
-  --panel-bg: rgba(8, 22, 34, 0.74);
-  --panel-border: rgba(141, 208, 235, 0.24);
-  --accent: #45d9ba;
-  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  --bg-dark: #0b0f1a;
+  --accent-blue: #3b82f6;
+  --accent-purple: #8b5cf6;
+  --text-main: #e5e7eb;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -29,9 +28,9 @@ body {
   overflow: hidden;
   color: var(--text-main);
   background:
-    radial-gradient(circle at 10% 15%, #0f3a52 0%, transparent 40%),
-    radial-gradient(circle at 90% 80%, #093e3a 0%, transparent 35%),
-    #050d17;
+    radial-gradient(circle at 12% 14%, rgba(59, 130, 246, 0.2), transparent 42%),
+    radial-gradient(circle at 86% 82%, rgba(139, 92, 246, 0.18), transparent 42%),
+    var(--bg-dark);
 }
 
 button,

@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import Game from '../../game/Game';
 
-export default function GameCanvas({ nickname, onStatsChange, settings }) {
+function GameCanvas({ nickname, onStatsChange, settings, onReady }) {
   const canvasRef = useRef(null);
   const gameRef = useRef(null);
 
@@ -18,13 +18,23 @@ export default function GameCanvas({ nickname, onStatsChange, settings }) {
     });
 
     gameRef.current = game;
+    if (onReady) {
+      onReady({
+        setVirtualDirection: (x, y) => game.setVirtualDirection(x, y),
+        triggerSplit: () => game.triggerSplit(),
+        setEjectActive: (isActive) => game.setEjectActive(isActive),
+      });
+    }
     game.start();
 
     return () => {
       game.stop();
+      if (onReady) {
+        onReady(null);
+      }
       gameRef.current = null;
     };
-  }, [nickname, onStatsChange]);
+  }, [nickname, onReady, onStatsChange]);
 
   useEffect(() => {
     if (!gameRef.current) {
@@ -36,3 +46,5 @@ export default function GameCanvas({ nickname, onStatsChange, settings }) {
 
   return <canvas className="game-canvas" ref={canvasRef} />;
 }
+
+export default memo(GameCanvas);

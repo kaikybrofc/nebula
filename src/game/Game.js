@@ -64,6 +64,10 @@ export default class Game {
     this.sendTimer = 0;
     this.inputSeq = 0;
     this.hudTimer = 0;
+    this.virtualDirection = { x: 0, y: 0 };
+    this.virtualDirectionActive = false;
+    this.virtualSplitQueued = false;
+    this.virtualEjectActive = false;
 
     this.currentFps = 0;
     this.fpsTimer = 0;
@@ -78,6 +82,31 @@ export default class Game {
       sensitivity: nextSettings.sensitivity ?? this.settings.sensitivity,
       zoom: nextSettings.zoom ?? this.settings.zoom,
     };
+  }
+
+  setVirtualDirection(x = 0, y = 0) {
+    const nextX = Number(x) || 0;
+    const nextY = Number(y) || 0;
+    const length = Math.hypot(nextX, nextY);
+
+    if (length < 0.001) {
+      this.virtualDirectionActive = false;
+      this.virtualDirection.x = 0;
+      this.virtualDirection.y = 0;
+      return;
+    }
+
+    this.virtualDirectionActive = true;
+    this.virtualDirection.x = nextX / length;
+    this.virtualDirection.y = nextY / length;
+  }
+
+  triggerSplit() {
+    this.virtualSplitQueued = true;
+  }
+
+  setEjectActive(isActive) {
+    this.virtualEjectActive = Boolean(isActive);
   }
 
   start() {
@@ -109,6 +138,11 @@ export default class Game {
     this.input.disconnect();
     this.netClient.close();
     this.predictedState.reset();
+    this.virtualDirectionActive = false;
+    this.virtualDirection.x = 0;
+    this.virtualDirection.y = 0;
+    this.virtualSplitQueued = false;
+    this.virtualEjectActive = false;
   }
 
   resize() {
@@ -150,19 +184,23 @@ export default class Game {
   }
 
   sendInput() {
-    const direction = this.input.getNormalizedScreenDirection();
+    const pointerDirection = this.input.getNormalizedScreenDirection();
+    const direction = this.virtualDirectionActive ? this.virtualDirection : pointerDirection;
     const scaledX = direction.x * this.settings.sensitivity;
     const scaledY = direction.y * this.settings.sensitivity;
     const length = Math.hypot(scaledX, scaledY);
     const dx = length > 1 ? scaledX / length : scaledX;
     const dy = length > 1 ? scaledY / length : scaledY;
+    const split = this.input.consumeSplit() || this.virtualSplitQueued;
+    const eject = this.input.isEjectHeld() || this.virtualEjectActive;
+    this.virtualSplitQueued = false;
 
     const inputPayload = {
       seq: this.inputSeq,
       dx,
       dy,
-      split: this.input.consumeSplit(),
-      eject: this.input.isEjectHeld(),
+      split,
+      eject,
     };
 
     this.netClient.sendInput(inputPayload);
@@ -259,6 +297,7 @@ export default class Game {
       (NET_PREDICTION_ENABLED ? this.predictedState.getAggregate() : null) ||
       this.remoteState.getLatestLocalAggregate();
     const counts = this.remoteState.getLatestCounts();
+    const selfId = this.remoteState.getSelfId();
 
     this.onStatsChange({
       mass: local ? local.mass : PLAYER_CONFIG.initialMass,
@@ -270,6 +309,11 @@ export default class Game {
       score: local ? Math.max(0, local.mass - PLAYER_CONFIG.initialMass) : 0,
       leaderboard: this.remoteState.getLatestLeaderboard(),
       playerRank: this.remoteState.getPlayerRank(),
+      selfId,
+      playerX: local ? local.x : WORLD_CONFIG.width * 0.5,
+      playerY: local ? local.y : WORLD_CONFIG.height * 0.5,
+      worldWidth: WORLD_CONFIG.width,
+      worldHeight: WORLD_CONFIG.height,
     });
   }
 }
