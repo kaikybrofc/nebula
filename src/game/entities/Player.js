@@ -12,23 +12,22 @@ import Blob from './Blob';
 import Pellet from './Pellet';
 
 export default class Player {
-  constructor({ x, y, nickname }) {
-    this.id = 'player_local';
+  constructor({
+    id = 'player_local',
+    x,
+    y,
+    nickname,
+    color = PLAYER_CONFIG.color,
+    strokeColor = PLAYER_CONFIG.strokeColor,
+    initialMass = PLAYER_CONFIG.initialMass,
+  }) {
+    this.id = id;
     this.nickname = nickname;
-    this.color = PLAYER_CONFIG.color;
-    this.strokeColor = PLAYER_CONFIG.strokeColor;
+    this.color = color;
+    this.strokeColor = strokeColor;
 
-    this.cells = [
-      new Blob({
-        x,
-        y,
-        mass: PLAYER_CONFIG.initialMass,
-        ownerId: this.id,
-        color: this.color,
-        strokeColor: this.strokeColor,
-        nickname,
-      }),
-    ];
+    this.cells = [];
+    this.spawnSingleCell({ x, y, mass: initialMass });
 
     this.aim = { x: 1, y: 0 };
     this.splitCooldown = 0;
@@ -36,8 +35,34 @@ export default class Player {
     this.sensitivity = 1;
   }
 
+  spawnSingleCell({ x, y, mass }) {
+    this.cells = [
+      new Blob({
+        x,
+        y,
+        mass,
+        ownerId: this.id,
+        color: this.color,
+        strokeColor: this.strokeColor,
+        nickname: this.nickname,
+      }),
+    ];
+  }
+
+  hasAliveCells() {
+    return this.cells.length > 0;
+  }
+
   setSensitivity(nextValue) {
     this.sensitivity = clamp(nextValue, 0.45, 1.8);
+  }
+
+  removeCellsByIds(idsToRemove) {
+    if (idsToRemove.size === 0) {
+      return;
+    }
+
+    this.cells = this.cells.filter((cell) => !idsToRemove.has(cell.id));
   }
 
   tickTimers(deltaTime) {
@@ -48,6 +73,7 @@ export default class Player {
       const cell = this.cells[index];
       cell.mergeTimer = Math.max(0, cell.mergeTimer - deltaTime);
       cell.splitCooldown = Math.max(0, cell.splitCooldown - deltaTime);
+      cell.spawnProtection = Math.max(0, cell.spawnProtection - deltaTime);
     }
   }
 
@@ -253,7 +279,7 @@ export default class Player {
     }
 
     if (removeIds.size > 0) {
-      this.cells = this.cells.filter((cell) => !removeIds.has(cell.id));
+      this.removeCellsByIds(removeIds);
     }
   }
 

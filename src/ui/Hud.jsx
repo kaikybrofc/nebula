@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 function formatScore(score) {
   return Math.floor(score).toLocaleString('pt-BR');
@@ -6,17 +6,6 @@ function formatScore(score) {
 
 export default function Hud({ nickname, stats, settings, onSettingsChange }) {
   const [showLeaderboard, setShowLeaderboard] = useState(true);
-
-  const leaderboard = useMemo(
-    () => [
-      {
-        id: nickname,
-        name: nickname,
-        score: stats.score,
-      },
-    ],
-    [nickname, stats.score],
-  );
 
   return (
     <aside className="hud" aria-live="polite">
@@ -33,6 +22,9 @@ export default function Hud({ nickname, stats, settings, onSettingsChange }) {
       <p>
         Células: <strong>{stats.cellCount}</strong>
       </p>
+      <p>
+        Rank: <strong>#{stats.playerRank}</strong>
+      </p>
 
       <div className="hud-actions">
         <button
@@ -47,9 +39,9 @@ export default function Hud({ nickname, stats, settings, onSettingsChange }) {
       {showLeaderboard && (
         <div className="hud-leaderboard">
           <h3>Leaderboard</h3>
-          {leaderboard.map((entry, index) => (
+          {stats.leaderboard.map((entry, index) => (
             <p key={entry.id}>
-              {index + 1}. {entry.name} <strong>{formatScore(entry.score)}</strong>
+              {index + 1}. {entry.name} <strong>{formatScore(entry.mass)}</strong>
             </p>
           ))}
         </div>

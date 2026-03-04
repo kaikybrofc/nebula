@@ -1,12 +1,24 @@
 export const WORLD_CONFIG = {
   width: 5000,
   height: 5000,
-  initialFoodCount: 2000,
+  initialFoodCount: 2400,
   foodSpawnMargin: 24,
 };
 
 export const GRID_CONFIG = {
   cellSize: 96,
+};
+
+export const SIM_CONFIG = {
+  seed: 133742,
+  maxFrameDelta: 0.1,
+  fixedTimeStep: 1 / 60,
+};
+
+export const COMBAT_CONFIG = {
+  eatMassThreshold: 1.15,
+  eatOverlapFactor: 0.2,
+  spawnProtectionSeconds: 0.5,
 };
 
 export const PLAYER_CONFIG = {
@@ -42,6 +54,28 @@ export const PLAYER_CONFIG = {
   ejectMass: 6,
   minMassToEject: 30,
   ejectImpulse: 730,
+};
+
+export const BOT_CONFIG = {
+  count: 10,
+  initialMass: 45,
+  respawnDelay: 2,
+  decisionIntervalMin: 0.12,
+  decisionIntervalMax: 0.24,
+  visionRange: 620,
+  chaseMassRatio: 1.3,
+  fearMassRatio: 1.08,
+  fleeDistance: 420,
+  wanderDistanceMin: 180,
+  wanderDistanceMax: 440,
+  colorPalette: [
+    { color: '#ff9a8d', stroke: '#de6658' },
+    { color: '#ffd180', stroke: '#d7a04b' },
+    { color: '#a9ff9a', stroke: '#6fca6d' },
+    { color: '#8cc8ff', stroke: '#4f90ce' },
+    { color: '#d6a7ff', stroke: '#9a68cc' },
+    { color: '#ffb4de', stroke: '#c973aa' },
+  ],
 };
 
 export const FOOD_CONFIG = {

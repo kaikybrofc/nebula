@@ -23,7 +23,7 @@ export default class Renderer {
     this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  render(player) {
+  render(owners) {
     const ctx = this.context;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -48,7 +48,7 @@ export default class Renderer {
     this.drawGrid(viewBounds);
     this.drawFood(viewBounds);
     this.drawPellets(viewBounds);
-    this.drawPlayerCells(player.cells, viewBounds);
+    this.drawOwnersCells(owners, viewBounds);
 
     ctx.restore();
     this.drawWorldBorder();
@@ -155,15 +155,19 @@ export default class Renderer {
     }
   }
 
-  drawPlayerCells(cells, bounds) {
-    for (let index = 0; index < cells.length; index += 1) {
-      const cell = cells[index];
+  drawOwnersCells(owners, bounds) {
+    for (let ownerIndex = 0; ownerIndex < owners.length; ownerIndex += 1) {
+      const owner = owners[ownerIndex];
 
-      if (!this.isInsideView(cell, bounds)) {
-        continue;
+      for (let cellIndex = 0; cellIndex < owner.cells.length; cellIndex += 1) {
+        const cell = owner.cells[cellIndex];
+
+        if (!this.isInsideView(cell, bounds)) {
+          continue;
+        }
+
+        this.drawCell(cell);
       }
-
-      this.drawCell(cell);
     }
   }
 

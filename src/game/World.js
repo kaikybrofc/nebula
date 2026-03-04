@@ -1,10 +1,11 @@
 import Food from './entities/Food';
 import SpatialGrid from './SpatialGrid';
 import { FOOD_CONFIG, GRID_CONFIG, PELLET_CONFIG, WORLD_CONFIG } from '../shared/config';
-import { applyExponentialDrag, clamp, randRange } from '../shared/utils';
+import { applyExponentialDrag, clamp } from '../shared/utils';
 
 export default class World {
-  constructor(config = WORLD_CONFIG) {
+  constructor(rng, config = WORLD_CONFIG) {
+    this.rng = rng;
     this.width = config.width;
     this.height = config.height;
     this.initialFoodCount = config.initialFoodCount;
@@ -22,16 +23,21 @@ export default class World {
     this.spawnFood(this.initialFoodCount);
   }
 
+  getRandomPosition(margin = this.foodSpawnMargin) {
+    return {
+      x: this.rng.range(margin, this.width - margin),
+      y: this.rng.range(margin, this.height - margin),
+    };
+  }
+
   spawnFood(amount = 1) {
     for (let index = 0; index < amount; index += 1) {
-      const margin = this.foodSpawnMargin;
-      const x = randRange(margin, this.width - margin);
-      const y = randRange(margin, this.height - margin);
-      const mass = randRange(FOOD_CONFIG.minMass, FOOD_CONFIG.maxMass);
-      const colorIndex = Math.floor(Math.random() * FOOD_CONFIG.colors.length);
+      const position = this.getRandomPosition(this.foodSpawnMargin);
+      const mass = this.rng.range(FOOD_CONFIG.minMass, FOOD_CONFIG.maxMass);
+      const colorIndex = this.rng.int(FOOD_CONFIG.colors.length);
       const color = FOOD_CONFIG.colors[colorIndex];
 
-      this.food.push(new Food(x, y, mass, color));
+      this.food.push(new Food(position.x, position.y, mass, color));
     }
   }
 

@@ -14,6 +14,8 @@ const initialStats = {
   cellCount: 1,
   fps: 0,
   score: 0,
+  leaderboard: [],
+  playerRank: 1,
 };
 
 export default function App() {
