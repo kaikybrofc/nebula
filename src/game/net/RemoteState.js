@@ -409,8 +409,9 @@ export default class RemoteState {
     }
 
     const { prev, next } = snapshotPair;
-    const serverTimeDelta = Math.max(1, next.serverTimeMs - prev.serverTimeMs);
-    const alpha = clamp01((renderServerTimeMs - prev.serverTimeMs) / serverTimeDelta);
+    const sameSnapshot = prev.tick === next.tick || prev.serverTimeMs === next.serverTimeMs;
+    const serverTimeDelta = sameSnapshot ? 1 : next.serverTimeMs - prev.serverTimeMs;
+    const alpha = sameSnapshot ? 0 : clamp01((renderServerTimeMs - prev.serverTimeMs) / serverTimeDelta);
 
     return {
       tick: lerp(prev.tick, next.tick, alpha),

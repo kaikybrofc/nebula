@@ -1,14 +1,12 @@
 import {
   COMBAT_CONFIG,
   NET_PREDICTION_ENABLED,
-  NET_RECONCILE_SMOOTHING,
   NET_SNAP_THRESHOLD,
   PLAYER_CONFIG,
   WORLD_CONFIG,
 } from '../../shared/config';
 import {
   clamp,
-  lerp,
   massToRadius,
 } from '../../shared/utils';
 import {
@@ -82,8 +80,6 @@ export default class PredictedState {
       const input = pending[index];
       this.simulateInput(input, input.dt || 0);
     }
-
-    this.applySmoothing(previousById);
   }
 
   applyLocalInput(input, deltaTime) {
@@ -106,6 +102,7 @@ export default class PredictedState {
 
   applyAuthoritativeState(selfId, authoritativeBlobs, previousById) {
     this.selfId = selfId;
+    const snapThresholdSq = NET_SNAP_THRESHOLD * NET_SNAP_THRESHOLD;
 
     if (authoritativeBlobs.length > 0) {
       this.nickname = authoritativeBlobs[0].nickname ?? this.nickname;
@@ -115,6 +112,12 @@ export default class PredictedState {
 
     this.cells = authoritativeBlobs.map((blob) => {
       const previous = previousById.get(blob.id);
+      const shouldKeepVelocity =
+        previous &&
+        distanceSquaredPositions(previous.pos, {
+          x: blob.x,
+          y: blob.y,
+        }) <= snapThresholdSq;
 
       return {
         id: blob.id,
@@ -123,7 +126,7 @@ export default class PredictedState {
         color: blob.color ?? this.color,
         stroke: blob.stroke ?? this.stroke,
         pos: { x: blob.x, y: blob.y },
-        vel: previous ? { ...previous.vel } : { x: 0, y: 0 },
+        vel: shouldKeepVelocity ? { ...previous.vel } : { x: 0, y: 0 },
         mass: blob.mass,
         radius: blob.r,
         mergeTimer: previous ? previous.mergeTimer : 0,
@@ -140,35 +143,6 @@ export default class PredictedState {
 
     this.lastAckSeq = Math.max(this.lastAckSeq, ackSeq);
     this.pendingInputs = this.pendingInputs.filter((input) => input.seq > this.lastAckSeq);
-  }
-
-  applySmoothing(previousById) {
-    const smoothing = clamp(NET_RECONCILE_SMOOTHING, 0, 1);
-    const snapThresholdSq = NET_SNAP_THRESHOLD * NET_SNAP_THRESHOLD;
-
-    if (smoothing <= 0) {
-      return;
-    }
-
-    for (let index = 0; index < this.cells.length; index += 1) {
-      const cell = this.cells[index];
-      const previous = previousById.get(cell.id);
-
-      if (!previous) {
-        continue;
-      }
-
-      const distSq = distanceSquaredPositions(cell.pos, previous.pos);
-
-      if (distSq > snapThresholdSq) {
-        continue;
-      }
-
-      cell.pos.x = lerp(previous.pos.x, cell.pos.x, smoothing);
-      cell.pos.y = lerp(previous.pos.y, cell.pos.y, smoothing);
-      cell.vel.x = lerp(previous.vel.x, cell.vel.x, smoothing);
-      cell.vel.y = lerp(previous.vel.y, cell.vel.y, smoothing);
-    }
   }
 
   simulateInput(input, deltaTime) {
@@ -188,6 +162,7 @@ export default class PredictedState {
     }
 
     this.updateMovement(deltaTime);
+    this.resolveInternalCollisions();
   }
 
   tickTimers(deltaTime) {
@@ -221,6 +196,105 @@ export default class PredictedState {
       cell.pos.y += cell.vel.y * deltaTime;
       this.clampCell(cell);
     }
+  }
+
+  resolveInternalCollisions() {
+    if (this.cells.length <= 1) {
+      return;
+    }
+
+    const removeIds = new Set();
+    const iterations = Math.max(1, PLAYER_CONFIG.softCollisionIterations || 1);
+    const maxPush = PLAYER_CONFIG.softCollisionMaxPush ?? Number.POSITIVE_INFINITY;
+    const damping = clamp(1 - (PLAYER_CONFIG.softCollisionDamping || 0), 0, 1);
+
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      for (let index = 0; index < this.cells.length; index += 1) {
+        const cell = this.cells[index];
+
+        if (removeIds.has(cell.id)) {
+          continue;
+        }
+
+        for (let otherIndex = index + 1; otherIndex < this.cells.length; otherIndex += 1) {
+          const other = this.cells[otherIndex];
+
+          if (
+            !other ||
+            other.ownerId !== cell.ownerId ||
+            removeIds.has(other.id) ||
+            removeIds.has(cell.id)
+          ) {
+            continue;
+          }
+
+          const mergeDistance = cell.radius + other.radius;
+          const distSq = distanceSquaredPositions(cell.pos, other.pos);
+
+          if (distSq > mergeDistance * mergeDistance) {
+            continue;
+          }
+
+          const canMerge = cell.mergeTimer <= 0 && other.mergeTimer <= 0;
+
+          if (canMerge) {
+            this.mergeCells(cell, other, removeIds);
+            continue;
+          }
+
+          const distance = Math.sqrt(Math.max(0.0001, distSq));
+          const overlap = mergeDistance - distance + PLAYER_CONFIG.softCollisionPadding;
+
+          if (overlap <= 0) {
+            continue;
+          }
+
+          const nx = (other.pos.x - cell.pos.x) / distance;
+          const ny = (other.pos.y - cell.pos.y) / distance;
+          const totalMass = Math.max(1, cell.mass + other.mass);
+          const cellWeight = other.mass / totalMass;
+          const otherWeight = cell.mass / totalMass;
+          const correction = Math.min(overlap * PLAYER_CONFIG.softCollisionPush, maxPush);
+
+          cell.pos.x -= nx * correction * cellWeight;
+          cell.pos.y -= ny * correction * cellWeight;
+          other.pos.x += nx * correction * otherWeight;
+          other.pos.y += ny * correction * otherWeight;
+
+          cell.vel.x *= damping;
+          cell.vel.y *= damping;
+          other.vel.x *= damping;
+          other.vel.y *= damping;
+
+          this.clampCell(cell);
+          this.clampCell(other);
+        }
+      }
+    }
+
+    if (removeIds.size > 0) {
+      this.cells = this.cells.filter((cell) => !removeIds.has(cell.id));
+    }
+  }
+
+  mergeCells(cell, other, removeIds) {
+    const primary = cell.mass >= other.mass ? cell : other;
+    const secondary = primary === cell ? other : cell;
+
+    if (removeIds.has(primary.id) || removeIds.has(secondary.id)) {
+      return;
+    }
+
+    const totalMass = primary.mass + secondary.mass;
+
+    primary.vel.x = (primary.vel.x * primary.mass + secondary.vel.x * secondary.mass) / totalMass;
+    primary.vel.y = (primary.vel.y * primary.mass + secondary.vel.y * secondary.mass) / totalMass;
+    primary.pos.x = (primary.pos.x * primary.mass + secondary.pos.x * secondary.mass) / totalMass;
+    primary.pos.y = (primary.pos.y * primary.mass + secondary.pos.y * secondary.mass) / totalMass;
+    primary.mass = totalMass;
+    primary.radius = massToRadius(totalMass);
+    primary.mergeTimer = 0;
+    removeIds.add(secondary.id);
   }
 
   getMergeDelay(mass) {

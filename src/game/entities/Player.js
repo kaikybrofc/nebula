@@ -218,64 +218,74 @@ export default class Player {
 
   resolveInternalCollisions(world, blobGrid) {
     const removeIds = new Set();
+    const iterations = Math.max(1, PLAYER_CONFIG.softCollisionIterations || 1);
+    const maxPush = PLAYER_CONFIG.softCollisionMaxPush ?? Number.POSITIVE_INFINITY;
+    const damping = clamp(1 - (PLAYER_CONFIG.softCollisionDamping || 0), 0, 1);
 
-    for (let index = 0; index < this.cells.length; index += 1) {
-      const cell = this.cells[index];
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      for (let index = 0; index < this.cells.length; index += 1) {
+        const cell = this.cells[index];
 
-      if (removeIds.has(cell.id)) {
-        continue;
-      }
-
-      const nearby = blobGrid.queryCircle(cell.pos.x, cell.pos.y, cell.radius + 260);
-
-      for (let candidateIndex = 0; candidateIndex < nearby.length; candidateIndex += 1) {
-        const other = nearby[candidateIndex];
-
-        if (
-          other.ownerId !== this.id ||
-          other.id === cell.id ||
-          removeIds.has(other.id) ||
-          removeIds.has(cell.id) ||
-          cell.id > other.id
-        ) {
+        if (removeIds.has(cell.id)) {
           continue;
         }
 
-        const mergeDistance = cell.radius + other.radius;
-        const distSq = distanceSquaredPos(cell, other);
+        const nearby = blobGrid.queryCircle(cell.pos.x, cell.pos.y, cell.radius + 260);
 
-        if (distSq > mergeDistance * mergeDistance) {
-          continue;
+        for (let candidateIndex = 0; candidateIndex < nearby.length; candidateIndex += 1) {
+          const other = nearby[candidateIndex];
+
+          if (
+            other.ownerId !== this.id ||
+            other.id === cell.id ||
+            removeIds.has(other.id) ||
+            removeIds.has(cell.id) ||
+            cell.id > other.id
+          ) {
+            continue;
+          }
+
+          const mergeDistance = cell.radius + other.radius;
+          const distSq = distanceSquaredPos(cell, other);
+
+          if (distSq > mergeDistance * mergeDistance) {
+            continue;
+          }
+
+          const canMerge = cell.mergeTimer <= 0 && other.mergeTimer <= 0;
+
+          if (canMerge) {
+            this.mergeCells(cell, other, removeIds);
+            continue;
+          }
+
+          const distance = Math.sqrt(Math.max(0.0001, distSq));
+          const overlap = mergeDistance - distance + PLAYER_CONFIG.softCollisionPadding;
+
+          if (overlap <= 0) {
+            continue;
+          }
+
+          const nx = (other.pos.x - cell.pos.x) / distance;
+          const ny = (other.pos.y - cell.pos.y) / distance;
+          const totalMass = cell.mass + other.mass;
+          const cellWeight = other.mass / totalMass;
+          const otherWeight = cell.mass / totalMass;
+          const correction = Math.min(overlap * PLAYER_CONFIG.softCollisionPush, maxPush);
+
+          cell.pos.x -= nx * correction * cellWeight;
+          cell.pos.y -= ny * correction * cellWeight;
+          other.pos.x += nx * correction * otherWeight;
+          other.pos.y += ny * correction * otherWeight;
+
+          cell.vel.x *= damping;
+          cell.vel.y *= damping;
+          other.vel.x *= damping;
+          other.vel.y *= damping;
+
+          world.clampEntity(cell);
+          world.clampEntity(other);
         }
-
-        const canMerge = cell.mergeTimer <= 0 && other.mergeTimer <= 0;
-
-        if (canMerge) {
-          this.mergeCells(cell, other, removeIds);
-          continue;
-        }
-
-        const distance = Math.sqrt(Math.max(0.0001, distSq));
-        const overlap = mergeDistance - distance + PLAYER_CONFIG.softCollisionPadding;
-
-        if (overlap <= 0) {
-          continue;
-        }
-
-        const nx = (other.pos.x - cell.pos.x) / distance;
-        const ny = (other.pos.y - cell.pos.y) / distance;
-        const totalMass = cell.mass + other.mass;
-        const cellWeight = other.mass / totalMass;
-        const otherWeight = cell.mass / totalMass;
-        const correction = overlap * PLAYER_CONFIG.softCollisionPush;
-
-        cell.pos.x -= nx * correction * cellWeight;
-        cell.pos.y -= ny * correction * cellWeight;
-        other.pos.x += nx * correction * otherWeight;
-        other.pos.y += ny * correction * otherWeight;
-
-        world.clampEntity(cell);
-        world.clampEntity(other);
       }
     }
 

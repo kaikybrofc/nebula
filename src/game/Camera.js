@@ -1,6 +1,11 @@
 import { CAMERA_CONFIG } from '../shared/config';
 import { clamp, lerp } from '../shared/utils';
 
+function smoothingToAlpha(smoothing, deltaTime) {
+  const clamped = clamp(smoothing, 0, 1);
+  return 1 - Math.pow(1 - clamped, deltaTime * 60);
+}
+
 export default class Camera {
   constructor() {
     this.x = 0;
@@ -35,7 +40,10 @@ export default class Camera {
   }
 
   update(target, deltaTime, zoomMultiplier = 1) {
-    const followAlpha = 1 - Math.exp(-CAMERA_CONFIG.followSharpness * deltaTime);
+    const followAlpha =
+      typeof CAMERA_CONFIG.followSmoothing === 'number'
+        ? smoothingToAlpha(CAMERA_CONFIG.followSmoothing, deltaTime)
+        : 1 - Math.exp(-CAMERA_CONFIG.followSharpness * deltaTime);
     this.x = lerp(this.x, target.x, followAlpha);
     this.y = lerp(this.y, target.y, followAlpha);
 
@@ -45,7 +53,10 @@ export default class Camera {
       CAMERA_CONFIG.minZoom,
       CAMERA_CONFIG.maxZoom,
     );
-    const zoomAlpha = 1 - Math.exp(-CAMERA_CONFIG.zoomSharpness * deltaTime);
+    const zoomAlpha =
+      typeof CAMERA_CONFIG.zoomSmoothing === 'number'
+        ? smoothingToAlpha(CAMERA_CONFIG.zoomSmoothing, deltaTime)
+        : 1 - Math.exp(-CAMERA_CONFIG.zoomSharpness * deltaTime);
     this.zoom = lerp(this.zoom, desiredZoom, zoomAlpha);
   }
 }

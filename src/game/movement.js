@@ -96,7 +96,7 @@ export function applyMovementForCell(cell, inputDirection, deltaTime, sensitivit
 
   if (
     magnitude(inputDirection.x, inputDirection.y) <= 0.0001 &&
-    speed < MOVE_CONFIG.snapToZeroThreshold
+    speed < (MOVE_CONFIG.snapVelThreshold ?? MOVE_CONFIG.snapToZeroThreshold ?? 0.01)
   ) {
     cell.vel.x = 0;
     cell.vel.y = 0;

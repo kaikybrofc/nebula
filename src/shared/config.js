@@ -6,18 +6,21 @@ export const WORLD_CONFIG = {
 };
 
 export const MOVE_CONFIG = {
-  // Nebulous-like movement: responsive acceleration with smooth deceleration.
-  baseSpeed: 1320,
-  accel: 2000,
-  drag: 2.35,
+  // Nebulous-like movement: quick response + smooth inertia.
+  baseSpeed: 420,
+  accel: 2600,
+  drag: 5.2,
   speedExponent: 0.3,
-  inputSmoothing: 0.38,
+  inputSmoothing: 0.35,
   joystickDeadzone: 0.1,
   joystickSmoothing: 0.35,
-  snapToZeroThreshold: 8,
+  snapVelThreshold: 0.04,
+  visualFollow: 0.3,
+  visualFollowLocal: 0.32,
+  visualFollowRemote: 1,
   referenceMass: 45,
-  minSpeed: 90,
-  maxSpeed: 470,
+  minSpeed: 80,
+  maxSpeed: 420,
 };
 
 export const GRID_CONFIG = {
@@ -26,7 +29,7 @@ export const GRID_CONFIG = {
 
 export const NET_CONFIG = {
   tps: 30,
-  interpDelayMs: 120,
+  interpDelayMs: 150,
   maxBufferedSnapshots: 90,
 };
 
@@ -69,6 +72,9 @@ export const PLAYER_CONFIG = {
   mergeMaxDelay: 20,
   softCollisionPadding: 0.8,
   softCollisionPush: 0.52,
+  softCollisionMaxPush: 18,
+  softCollisionDamping: 0.1,
+  softCollisionIterations: 2,
 
   ejectCooldown: 0.12,
   ejectMass: 6,
@@ -117,6 +123,8 @@ export const CAMERA_CONFIG = {
   maxZoom: 1.35,
   referenceMass: 45,
   zoomExponent: 0.13,
+  followSmoothing: 0.22,
+  zoomSmoothing: 0.18,
   followSharpness: 8.5,
   zoomSharpness: 5,
 };

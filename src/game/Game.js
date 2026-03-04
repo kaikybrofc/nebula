@@ -1,6 +1,7 @@
 import Camera from './Camera';
 import Input from './Input';
 import Renderer from './Renderer';
+import VisualState from './VisualState';
 import NetClient from './net/NetClient';
 import PredictedState from './net/PredictedState';
 import RemoteState from './net/RemoteState';
@@ -16,6 +17,45 @@ const SEND_RATE = 1 / NET_CONFIG.tps;
 const HUD_UPDATE_INTERVAL = 0.1;
 const FPS_UPDATE_INTERVAL = 0.4;
 const MAX_FRAME_DELTA = 0.1;
+
+function aggregateOwnerBlobs(blobs, ownerId) {
+  if (!ownerId) {
+    return null;
+  }
+
+  let totalMass = 0;
+  let sumX = 0;
+  let sumY = 0;
+  let largestRadius = 0;
+  let cellCount = 0;
+
+  for (let index = 0; index < blobs.length; index += 1) {
+    const blob = blobs[index];
+
+    if (blob.ownerId !== ownerId) {
+      continue;
+    }
+
+    const mass = typeof blob.mass === 'number' ? blob.mass : 0;
+    totalMass += mass;
+    sumX += blob.x * mass;
+    sumY += blob.y * mass;
+    largestRadius = Math.max(largestRadius, blob.r || 0);
+    cellCount += 1;
+  }
+
+  if (cellCount === 0 || totalMass <= 0) {
+    return null;
+  }
+
+  return {
+    x: sumX / totalMass,
+    y: sumY / totalMass,
+    mass: totalMass,
+    largestRadius,
+    cellCount,
+  };
+}
 
 export default class Game {
   constructor(canvas, { nickname, onStatsChange, settings = GAME_SETTINGS_DEFAULTS }) {
@@ -36,6 +76,7 @@ export default class Game {
       width: WORLD_CONFIG.width,
       height: WORLD_CONFIG.height,
     });
+    this.visualState = new VisualState();
 
     this.remoteState = new RemoteState();
     this.predictedState = new PredictedState();
@@ -118,6 +159,7 @@ export default class Game {
     this.running = true;
     this.input.connect();
     this.netClient.connect(this.nickname);
+    this.visualState.reset();
 
     window.addEventListener('resize', this.resize);
     this.resize();
@@ -139,6 +181,7 @@ export default class Game {
     this.input.disconnect();
     this.netClient.close();
     this.predictedState.reset();
+    this.visualState.reset();
     this.virtualDirectionActive = false;
     this.virtualDirection.x = 0;
     this.virtualDirection.y = 0;
@@ -170,7 +213,9 @@ export default class Game {
       this.sendTimer -= SEND_RATE;
     }
 
-    this.currentFrame = this.buildRenderFrame(this.remoteState.getInterpolatedFrame());
+    const selfId = this.remoteState.getSelfId();
+    const simFrame = this.buildRenderFrame(this.remoteState.getInterpolatedFrame());
+    this.currentFrame = this.visualState.buildFrame(simFrame, frameDelta, selfId);
     this.updateCamera(this.currentFrame, frameDelta);
     this.updateFpsCounter(frameDelta);
 
@@ -253,7 +298,9 @@ export default class Game {
   }
 
   updateCamera(frame, deltaTime) {
+    const selfId = this.remoteState.getSelfId();
     const local =
+      aggregateOwnerBlobs(frame.blobs, selfId) ||
       (NET_PREDICTION_ENABLED ? this.predictedState.getAggregate() : null) ||
       this.remoteState.getLocalAggregateFromFrame(frame);
 
