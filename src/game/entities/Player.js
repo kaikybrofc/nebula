@@ -1,4 +1,4 @@
-import { PLAYER_CONFIG } from '../../shared/config';
+import { PLAYER_CONFIG } from '../../shared/config.js';
 import {
   applyExponentialDrag,
   clamp,
@@ -7,9 +7,9 @@ import {
   magnitude,
   massToRadius,
   normalize,
-} from '../../shared/utils';
-import Blob from './Blob';
-import Pellet from './Pellet';
+} from '../../shared/utils.js';
+import Blob from './Blob.js';
+import Pellet from './Pellet.js';
 
 export default class Player {
   constructor({

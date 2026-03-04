@@ -1,11 +1,11 @@
 import { RENDER_CONFIG } from '../shared/config';
 
 export default class Renderer {
-  constructor(canvas, context, camera, world) {
+  constructor(canvas, context, camera, worldBounds) {
     this.canvas = canvas;
     this.context = context;
     this.camera = camera;
-    this.world = world;
+    this.worldBounds = worldBounds;
     this.width = 0;
     this.height = 0;
     this.dpr = 1;
@@ -23,7 +23,7 @@ export default class Renderer {
     this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  render(owners) {
+  render(remoteState) {
     const ctx = this.context;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -41,14 +41,14 @@ export default class Renderer {
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, this.world.width, this.world.height);
+    ctx.rect(0, 0, this.worldBounds.width, this.worldBounds.height);
     ctx.clip();
 
     const viewBounds = this.camera.getViewBounds(180);
     this.drawGrid(viewBounds);
-    this.drawFood(viewBounds);
-    this.drawPellets(viewBounds);
-    this.drawOwnersCells(owners, viewBounds);
+    this.drawFoods(remoteState.foods, viewBounds);
+    this.drawPellets(remoteState.pellets, viewBounds);
+    this.drawBlobs(remoteState.blobs, viewBounds);
 
     ctx.restore();
     this.drawWorldBorder();
@@ -59,7 +59,7 @@ export default class Renderer {
     const ctx = this.context;
 
     ctx.fillStyle = RENDER_CONFIG.worldFill;
-    ctx.fillRect(0, 0, this.world.width, this.world.height);
+    ctx.fillRect(0, 0, this.worldBounds.width, this.worldBounds.height);
   }
 
   drawWorldBorder() {
@@ -71,12 +71,12 @@ export default class Renderer {
     ctx.globalAlpha = 0.32;
     ctx.shadowColor = RENDER_CONFIG.worldBorderGlow;
     ctx.shadowBlur = 30 / this.camera.zoom;
-    ctx.strokeRect(0, 0, this.world.width, this.world.height);
+    ctx.strokeRect(0, 0, this.worldBounds.width, this.worldBounds.height);
     ctx.restore();
 
     ctx.lineWidth = 4 / this.camera.zoom;
     ctx.strokeStyle = RENDER_CONFIG.worldBorder;
-    ctx.strokeRect(0, 0, this.world.width, this.world.height);
+    ctx.strokeRect(0, 0, this.worldBounds.width, this.worldBounds.height);
   }
 
   drawGrid(bounds) {
@@ -111,18 +111,18 @@ export default class Renderer {
 
   isInsideView(entity, bounds) {
     return !(
-      entity.pos.x + entity.radius < bounds.left ||
-      entity.pos.x - entity.radius > bounds.right ||
-      entity.pos.y + entity.radius < bounds.top ||
-      entity.pos.y - entity.radius > bounds.bottom
+      entity.x + entity.r < bounds.left ||
+      entity.x - entity.r > bounds.right ||
+      entity.y + entity.r < bounds.top ||
+      entity.y - entity.r > bounds.bottom
     );
   }
 
-  drawFood(bounds) {
+  drawFoods(foods, bounds) {
     const ctx = this.context;
 
-    for (let index = 0; index < this.world.food.length; index += 1) {
-      const food = this.world.food[index];
+    for (let index = 0; index < foods.length; index += 1) {
+      const food = foods[index];
 
       if (!this.isInsideView(food, bounds)) {
         continue;
@@ -130,16 +130,16 @@ export default class Renderer {
 
       ctx.beginPath();
       ctx.fillStyle = food.color;
-      ctx.arc(food.pos.x, food.pos.y, food.radius, 0, Math.PI * 2);
+      ctx.arc(food.x, food.y, food.r, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  drawPellets(bounds) {
+  drawPellets(pellets, bounds) {
     const ctx = this.context;
 
-    for (let index = 0; index < this.world.pellets.length; index += 1) {
-      const pellet = this.world.pellets[index];
+    for (let index = 0; index < pellets.length; index += 1) {
+      const pellet = pellets[index];
 
       if (!this.isInsideView(pellet, bounds)) {
         continue;
@@ -147,61 +147,55 @@ export default class Renderer {
 
       ctx.beginPath();
       ctx.fillStyle = pellet.color;
-      ctx.strokeStyle = pellet.strokeColor;
+      ctx.strokeStyle = pellet.stroke;
       ctx.lineWidth = 2 / this.camera.zoom;
-      ctx.arc(pellet.pos.x, pellet.pos.y, pellet.radius, 0, Math.PI * 2);
+      ctx.arc(pellet.x, pellet.y, pellet.r, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
   }
 
-  drawOwnersCells(owners, bounds) {
-    for (let ownerIndex = 0; ownerIndex < owners.length; ownerIndex += 1) {
-      const owner = owners[ownerIndex];
+  drawBlobs(blobs, bounds) {
+    const visible = [];
 
-      for (let cellIndex = 0; cellIndex < owner.cells.length; cellIndex += 1) {
-        const cell = owner.cells[cellIndex];
-
-        if (!this.isInsideView(cell, bounds)) {
-          continue;
-        }
-
-        this.drawCell(cell);
+    for (let index = 0; index < blobs.length; index += 1) {
+      if (this.isInsideView(blobs[index], bounds)) {
+        visible.push(blobs[index]);
       }
+    }
+
+    visible.sort((left, right) => left.r - right.r);
+
+    for (let index = 0; index < visible.length; index += 1) {
+      this.drawBlob(visible[index]);
     }
   }
 
-  drawCell(cell) {
+  drawBlob(blob) {
     const ctx = this.context;
 
     ctx.beginPath();
-    ctx.fillStyle = cell.color;
-    ctx.strokeStyle = cell.strokeColor;
+    ctx.fillStyle = blob.color;
+    ctx.strokeStyle = blob.stroke;
     ctx.lineWidth = 6 / this.camera.zoom;
-    ctx.arc(cell.pos.x, cell.pos.y, cell.radius, 0, Math.PI * 2);
+    ctx.arc(blob.x, blob.y, blob.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
     ctx.beginPath();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.arc(
-      cell.pos.x - cell.radius * 0.32,
-      cell.pos.y - cell.radius * 0.32,
-      cell.radius * 0.35,
-      0,
-      Math.PI * 2,
-    );
+    ctx.arc(blob.x - blob.r * 0.32, blob.y - blob.r * 0.32, blob.r * 0.35, 0, Math.PI * 2);
     ctx.fill();
 
-    if (cell.radius < 16) {
+    if (blob.r < 16) {
       return;
     }
 
-    const fontSize = Math.max(13, cell.radius * 0.35);
+    const fontSize = Math.max(13, blob.r * 0.35);
     ctx.font = `${fontSize}px "Trebuchet MS", "Segoe UI", sans-serif`;
     ctx.fillStyle = '#f2f7ff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(cell.nickname, cell.pos.x, cell.pos.y);
+    ctx.fillText(blob.nickname, blob.x, blob.y);
   }
 }

@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "server": "node --env-file=.env ./server/index.js",
     "deploy": "bash ./scripts/deploy-nginx.sh",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

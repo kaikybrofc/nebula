@@ -1,5 +1,5 @@
-import { PELLET_CONFIG } from '../../shared/config';
-import { createEntityId, massToRadius } from '../../shared/utils';
+import { PELLET_CONFIG } from '../../shared/config.js';
+import { createEntityId, massToRadius } from '../../shared/utils.js';
 
 export default class Pellet {
   constructor({ x, y, mass, ownerId, vx, vy }) {

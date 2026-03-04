@@ -1,11 +1,11 @@
-import { COMBAT_CONFIG, PLAYER_CONFIG } from '../../shared/config';
+import { COMBAT_CONFIG, PLAYER_CONFIG } from '../../shared/config.js';
 import {
   clamp,
   createEntityId,
   limitVector,
   massToRadius,
   normalize,
-} from '../../shared/utils';
+} from '../../shared/utils.js';
 
 export default class Blob {
   constructor({

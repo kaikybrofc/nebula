@@ -1,4 +1,4 @@
-import { createEntityId, massToRadius } from '../../shared/utils';
+import { createEntityId, massToRadius } from '../../shared/utils.js';
 
 export default class Food {
   constructor(x, y, mass, color) {

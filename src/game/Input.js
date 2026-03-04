@@ -72,4 +72,22 @@ export default class Input {
   getWorldMouse(camera) {
     return camera.screenToWorld(this.mouseX, this.mouseY);
   }
+
+  getNormalizedScreenDirection() {
+    const rect = this.canvas.getBoundingClientRect();
+    const centerX = rect.width * 0.5;
+    const centerY = rect.height * 0.5;
+    const dx = this.mouseX - centerX;
+    const dy = this.mouseY - centerY;
+    const length = Math.hypot(dx, dy);
+
+    if (length < 4) {
+      return { x: 0, y: 0 };
+    }
+
+    return {
+      x: dx / length,
+      y: dy / length,
+    };
+  }
 }

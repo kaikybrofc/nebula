@@ -1,7 +1,7 @@
 export const WORLD_CONFIG = {
   width: 5000,
   height: 5000,
-  initialFoodCount: 2400,
+  initialFoodCount: 600,
   foodSpawnMargin: 24,
 };
 

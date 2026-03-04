@@ -1,7 +1,7 @@
-import Food from './entities/Food';
-import SpatialGrid from './SpatialGrid';
-import { FOOD_CONFIG, GRID_CONFIG, PELLET_CONFIG, WORLD_CONFIG } from '../shared/config';
-import { applyExponentialDrag, clamp } from '../shared/utils';
+import Food from './entities/Food.js';
+import SpatialGrid from './SpatialGrid.js';
+import { FOOD_CONFIG, GRID_CONFIG, PELLET_CONFIG, WORLD_CONFIG } from '../shared/config.js';
+import { applyExponentialDrag, clamp } from '../shared/utils.js';
 
 export default class World {
   constructor(rng, config = WORLD_CONFIG) {
