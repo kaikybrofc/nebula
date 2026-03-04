@@ -3,6 +3,10 @@ import Player from '../src/game/entities/Player.js';
 import {
   CAMERA_CONFIG,
   COMBAT_CONFIG,
+  NET_DELTA_ENABLED,
+  NET_DELTA_QUANTIZE_MASS,
+  NET_DELTA_QUANTIZE_POS,
+  NET_DELTA_QUANTIZE_RADIUS,
   PELLET_CONFIG,
   PLAYER_CONFIG,
   SIM_CONFIG,
@@ -11,6 +15,18 @@ import {
 } from '../src/shared/config.js';
 import SeededRandom from '../src/shared/random.js';
 import { clamp, distanceSquaredPos } from '../src/shared/utils.js';
+
+function quantizeBucket(value, step) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+
+  if (step <= 0) {
+    return value;
+  }
+
+  return Math.round(value / step);
+}
 
 export default class Room {
   constructor() {
@@ -40,7 +56,7 @@ export default class Room {
 
     this.nextPlayerId += 1;
 
-    this.clients.set(socket, {
+    const client = {
       socket,
       player,
       input: {
@@ -51,7 +67,12 @@ export default class Room {
         eject: false,
       },
       respawnTimer: 0,
-    });
+      needsFullSnapshot: true,
+      lastSentEntities: new Map(),
+    };
+
+    this.clients.set(socket, client);
+    this.sendFullSnapshotOnJoin(client);
   }
 
   removeClient(socket) {
@@ -403,6 +424,20 @@ export default class Room {
     return visible;
   }
 
+  buildVisibleEntities(client) {
+    const viewCenter = this.getPlayerViewCenter(client.player);
+    const viewRadius = this.getPlayerViewRadius(client.player);
+    const visibleBlobs = this.queryVisibleEntities(this.world.blobGrid, viewCenter, viewRadius);
+    const visibleFoods = this.queryVisibleEntities(this.world.foodGrid, viewCenter, viewRadius);
+    const visiblePellets = this.queryVisibleEntities(this.world.pelletGrid, viewCenter, viewRadius);
+
+    return {
+      blobs: visibleBlobs.map((cell) => this.serializeBlob(cell)),
+      foods: visibleFoods.map((food) => this.serializeFood(food)),
+      pellets: visiblePellets.map((pellet) => this.serializePellet(pellet)),
+    };
+  }
+
   serializeBlob(cell) {
     return {
       id: cell.id,
@@ -439,24 +474,210 @@ export default class Room {
     };
   }
 
-  buildSnapshotForClient(client, leaderboard) {
-    const viewCenter = this.getPlayerViewCenter(client.player);
-    const viewRadius = this.getPlayerViewRadius(client.player);
-    const visibleBlobs = this.queryVisibleEntities(this.world.blobGrid, viewCenter, viewRadius);
-    const visibleFoods = this.queryVisibleEntities(this.world.foodGrid, viewCenter, viewRadius);
-    const visiblePellets = this.queryVisibleEntities(this.world.pelletGrid, viewCenter, viewRadius);
-
+  buildFullSnapshotForClient(client, visibleEntities, leaderboard) {
     return {
-      type: 'snapshot',
+      type: 'snapshot_full',
       tick: this.tick,
       selfId: client.player.id,
       entities: {
-        blobs: visibleBlobs.map((cell) => this.serializeBlob(cell)),
-        foods: visibleFoods.map((food) => this.serializeFood(food)),
-        pellets: visiblePellets.map((pellet) => this.serializePellet(pellet)),
+        blobs: visibleEntities.blobs,
+        foods: visibleEntities.foods,
+        pellets: visibleEntities.pellets,
       },
       leaderboard,
     };
+  }
+
+  buildDeltaStateEntry(type, entity) {
+    const base = {
+      type,
+      id: entity.id,
+      qx: quantizeBucket(entity.x, NET_DELTA_QUANTIZE_POS),
+      qy: quantizeBucket(entity.y, NET_DELTA_QUANTIZE_POS),
+      qr: quantizeBucket(entity.r, NET_DELTA_QUANTIZE_RADIUS),
+    };
+
+    if (type === 'blobs') {
+      return {
+        ...base,
+        qm: quantizeBucket(entity.mass, NET_DELTA_QUANTIZE_MASS),
+        createPayload: {
+          id: entity.id,
+          ownerId: entity.ownerId,
+          x: entity.x,
+          y: entity.y,
+          r: entity.r,
+          mass: entity.mass,
+          nickname: entity.nickname,
+          color: entity.color,
+          stroke: entity.stroke,
+        },
+        updatePayload: {
+          id: entity.id,
+          x: entity.x,
+          y: entity.y,
+          r: entity.r,
+          mass: entity.mass,
+        },
+      };
+    }
+
+    if (type === 'foods') {
+      return {
+        ...base,
+        createPayload: {
+          id: entity.id,
+          x: entity.x,
+          y: entity.y,
+          r: entity.r,
+          color: entity.color,
+        },
+        updatePayload: {
+          id: entity.id,
+          x: entity.x,
+          y: entity.y,
+          r: entity.r,
+        },
+      };
+    }
+
+    return {
+      ...base,
+      createPayload: {
+        id: entity.id,
+        ownerId: entity.ownerId,
+        x: entity.x,
+        y: entity.y,
+        r: entity.r,
+        color: entity.color,
+        stroke: entity.stroke,
+      },
+      updatePayload: {
+        id: entity.id,
+        x: entity.x,
+        y: entity.y,
+        r: entity.r,
+      },
+    };
+  }
+
+  buildEntityDeltaMap(visibleEntities) {
+    const entityMap = new Map();
+
+    for (let index = 0; index < visibleEntities.blobs.length; index += 1) {
+      const blob = visibleEntities.blobs[index];
+      entityMap.set(`b:${blob.id}`, this.buildDeltaStateEntry('blobs', blob));
+    }
+
+    for (let index = 0; index < visibleEntities.foods.length; index += 1) {
+      const food = visibleEntities.foods[index];
+      entityMap.set(`f:${food.id}`, this.buildDeltaStateEntry('foods', food));
+    }
+
+    for (let index = 0; index < visibleEntities.pellets.length; index += 1) {
+      const pellet = visibleEntities.pellets[index];
+      entityMap.set(`p:${pellet.id}`, this.buildDeltaStateEntry('pellets', pellet));
+    }
+
+    return entityMap;
+  }
+
+  hasEntityStateChanged(previousState, currentState) {
+    if (previousState.qx !== currentState.qx || previousState.qy !== currentState.qy) {
+      return true;
+    }
+
+    if (previousState.qr !== currentState.qr) {
+      return true;
+    }
+
+    if (previousState.type === 'blobs' && previousState.qm !== currentState.qm) {
+      return true;
+    }
+
+    return false;
+  }
+
+  buildDeltaSnapshotForClient(client, currentEntityMap, leaderboard) {
+    const create = {
+      blobs: [],
+      foods: [],
+      pellets: [],
+    };
+    const update = {
+      blobs: [],
+      foods: [],
+      pellets: [],
+    };
+    const remove = {
+      blobs: [],
+      foods: [],
+      pellets: [],
+    };
+
+    for (const [key, currentState] of currentEntityMap.entries()) {
+      const previousState = client.lastSentEntities.get(key);
+
+      if (!previousState) {
+        create[currentState.type].push(currentState.createPayload);
+        continue;
+      }
+
+      if (this.hasEntityStateChanged(previousState, currentState)) {
+        update[currentState.type].push(currentState.updatePayload);
+      }
+    }
+
+    for (const [key, previousState] of client.lastSentEntities.entries()) {
+      if (currentEntityMap.has(key)) {
+        continue;
+      }
+
+      remove[previousState.type].push(previousState.id);
+    }
+
+    return {
+      type: 'snapshot_delta',
+      tick: this.tick,
+      selfId: client.player.id,
+      create,
+      update,
+      delete: remove,
+      leaderboard,
+    };
+  }
+
+  buildSnapshotForClient(client, leaderboard) {
+    const visibleEntities = this.buildVisibleEntities(client);
+    const currentEntityMap = this.buildEntityDeltaMap(visibleEntities);
+
+    if (client.needsFullSnapshot || !NET_DELTA_ENABLED) {
+      return {
+        snapshot: this.buildFullSnapshotForClient(client, visibleEntities, leaderboard),
+        currentEntityMap,
+      };
+    }
+
+    return {
+      snapshot: this.buildDeltaSnapshotForClient(client, currentEntityMap, leaderboard),
+      currentEntityMap,
+    };
+  }
+
+  sendFullSnapshotOnJoin(client) {
+    if (client.socket.readyState !== 1) {
+      return;
+    }
+
+    this.world.rebuildSpatialIndexes(this.getAllCells());
+    const leaderboard = this.buildLeaderboard();
+    const visibleEntities = this.buildVisibleEntities(client);
+    const currentEntityMap = this.buildEntityDeltaMap(visibleEntities);
+    const snapshot = this.buildFullSnapshotForClient(client, visibleEntities, leaderboard);
+
+    client.socket.send(JSON.stringify(snapshot));
+    client.lastSentEntities = currentEntityMap;
+    client.needsFullSnapshot = false;
   }
 
   broadcastSnapshots() {
@@ -473,8 +694,10 @@ export default class Room {
         continue;
       }
 
-      const snapshot = this.buildSnapshotForClient(client, leaderboard);
+      const { snapshot, currentEntityMap } = this.buildSnapshotForClient(client, leaderboard);
       client.socket.send(JSON.stringify(snapshot));
+      client.lastSentEntities = currentEntityMap;
+      client.needsFullSnapshot = false;
     }
   }
 }

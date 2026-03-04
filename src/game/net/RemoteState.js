@@ -5,6 +5,25 @@ function clamp01(value) {
   return Math.max(0, Math.min(1, value));
 }
 
+function cloneEntity(entity) {
+  return { ...entity };
+}
+
+function arrayToMap(entities = []) {
+  const map = new Map();
+
+  for (let index = 0; index < entities.length; index += 1) {
+    const entity = entities[index];
+    map.set(entity.id, cloneEntity(entity));
+  }
+
+  return map;
+}
+
+function mapToArray(entityMap) {
+  return [...entityMap.values()].map((entity) => cloneEntity(entity));
+}
+
 function buildEntityMap(entities) {
   const map = new Map();
 
@@ -97,6 +116,19 @@ function aggregateLocalBlobs(blobs, selfId) {
   };
 }
 
+function normalizeSnapshot(rawSnapshot) {
+  return {
+    tick: rawSnapshot.tick,
+    selfId: rawSnapshot.selfId ?? null,
+    entities: {
+      blobs: rawSnapshot.entities?.blobs ?? [],
+      foods: rawSnapshot.entities?.foods ?? [],
+      pellets: rawSnapshot.entities?.pellets ?? [],
+    },
+    leaderboard: rawSnapshot.leaderboard ?? [],
+  };
+}
+
 export default class RemoteState {
   constructor() {
     this.selfId = null;
@@ -107,26 +139,101 @@ export default class RemoteState {
       foods: [],
       pellets: [],
     };
+
+    // Current authoritative client-side state reconstructed from full/delta messages.
+    this.currentState = {
+      blobs: new Map(),
+      foods: new Map(),
+      pellets: new Map(),
+    };
+
+    // Interpolation buffer still keeps complete snapshots.
     this.snapshotBuffer = [];
   }
 
   applySnapshot(snapshot) {
-    if (!snapshot || snapshot.type !== 'snapshot' || typeof snapshot.tick !== 'number') {
+    if (!snapshot || typeof snapshot.tick !== 'number') {
       return;
     }
 
-    const normalizedSnapshot = {
-      tick: snapshot.tick,
-      selfId: snapshot.selfId,
-      entities: {
-        blobs: snapshot.entities?.blobs ?? [],
-        foods: snapshot.entities?.foods ?? [],
-        pellets: snapshot.entities?.pellets ?? [],
-      },
-      leaderboard: snapshot.leaderboard ?? [],
+    if (snapshot.type === 'snapshot' || snapshot.type === 'snapshot_full') {
+      this.applyFullSnapshot(snapshot);
+      return;
+    }
+
+    if (snapshot.type === 'snapshot_delta') {
+      this.applyDeltaSnapshot(snapshot);
+    }
+  }
+
+  applyFullSnapshot(snapshot) {
+    const normalized = normalizeSnapshot(snapshot);
+
+    this.selfId = normalized.selfId;
+    this.currentState = {
+      blobs: arrayToMap(normalized.entities.blobs),
+      foods: arrayToMap(normalized.entities.foods),
+      pellets: arrayToMap(normalized.entities.pellets),
     };
 
-    this.selfId = normalizedSnapshot.selfId;
+    // Full snapshot resets interpolation history to avoid blending with stale worlds.
+    this.snapshotBuffer = [];
+    this.pushReconstructedSnapshot(normalized.tick, normalized.leaderboard, normalized.selfId);
+  }
+
+  applyDeltaSnapshot(snapshot) {
+    if (snapshot.selfId) {
+      this.selfId = snapshot.selfId;
+    }
+
+    this.applyDeltaForType(this.currentState.blobs, snapshot.create?.blobs, snapshot.update?.blobs, snapshot.delete?.blobs);
+    this.applyDeltaForType(this.currentState.foods, snapshot.create?.foods, snapshot.update?.foods, snapshot.delete?.foods);
+    this.applyDeltaForType(
+      this.currentState.pellets,
+      snapshot.create?.pellets,
+      snapshot.update?.pellets,
+      snapshot.delete?.pellets,
+    );
+
+    this.pushReconstructedSnapshot(snapshot.tick, snapshot.leaderboard ?? [], this.selfId);
+  }
+
+  applyDeltaForType(map, createList = [], updateList = [], deleteList = []) {
+    for (let index = 0; index < createList.length; index += 1) {
+      const entity = createList[index];
+      map.set(entity.id, cloneEntity(entity));
+    }
+
+    for (let index = 0; index < updateList.length; index += 1) {
+      const patch = updateList[index];
+      const previous = map.get(patch.id);
+
+      if (!previous) {
+        continue;
+      }
+
+      map.set(patch.id, {
+        ...previous,
+        ...patch,
+      });
+    }
+
+    for (let index = 0; index < deleteList.length; index += 1) {
+      map.delete(deleteList[index]);
+    }
+  }
+
+  pushReconstructedSnapshot(tick, leaderboard, selfId) {
+    const normalizedSnapshot = {
+      tick,
+      selfId: selfId ?? this.selfId,
+      entities: {
+        blobs: mapToArray(this.currentState.blobs),
+        foods: mapToArray(this.currentState.foods),
+        pellets: mapToArray(this.currentState.pellets),
+      },
+      leaderboard,
+    };
 
     const snapshotIndex = this.snapshotBuffer.findIndex(
       (bufferedSnapshot) => bufferedSnapshot.tick === normalizedSnapshot.tick,
@@ -140,10 +247,7 @@ export default class RemoteState {
     }
 
     if (this.snapshotBuffer.length > NET_CONFIG.maxBufferedSnapshots) {
-      this.snapshotBuffer.splice(
-        0,
-        this.snapshotBuffer.length - NET_CONFIG.maxBufferedSnapshots,
-      );
+      this.snapshotBuffer.splice(0, this.snapshotBuffer.length - NET_CONFIG.maxBufferedSnapshots);
     }
 
     const latestSnapshot = this.snapshotBuffer[this.snapshotBuffer.length - 1];
@@ -151,6 +255,7 @@ export default class RemoteState {
     this.latestTick = latestSnapshot.tick;
     this.latestEntities = latestSnapshot.entities;
     this.latestLeaderboard = latestSnapshot.leaderboard;
+    this.selfId = latestSnapshot.selfId ?? this.selfId;
   }
 
   getRenderTick() {

@@ -17,6 +17,10 @@ export const NET_CONFIG = {
 
 export const VIEW_RADIUS_BASE = 1100;
 export const VIEW_RADIUS_MULTIPLIER = 1.15;
+export const NET_DELTA_ENABLED = true;
+export const NET_DELTA_QUANTIZE_POS = 1;
+export const NET_DELTA_QUANTIZE_RADIUS = 0.1;
+export const NET_DELTA_QUANTIZE_MASS = 0.1;
 
 export const SIM_CONFIG = {
   seed: 133742,

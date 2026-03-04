@@ -43,7 +43,12 @@ export default class NetClient {
         return;
       }
 
-      if (payload.type === 'snapshot' && this.onSnapshot) {
+      if (
+        (payload.type === 'snapshot' ||
+          payload.type === 'snapshot_full' ||
+          payload.type === 'snapshot_delta') &&
+        this.onSnapshot
+      ) {
         this.onSnapshot(payload);
       }
     });
