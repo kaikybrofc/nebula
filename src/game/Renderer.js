@@ -23,7 +23,7 @@ export default class Renderer {
     this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  render(remoteState) {
+  render(frame) {
     const ctx = this.context;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -46,9 +46,9 @@ export default class Renderer {
 
     const viewBounds = this.camera.getViewBounds(180);
     this.drawGrid(viewBounds);
-    this.drawFoods(remoteState.foods, viewBounds);
-    this.drawPellets(remoteState.pellets, viewBounds);
-    this.drawBlobs(remoteState.blobs, viewBounds);
+    this.drawFoods(frame.foods, viewBounds);
+    this.drawPellets(frame.pellets, viewBounds);
+    this.drawBlobs(frame.blobs, viewBounds);
 
     ctx.restore();
     this.drawWorldBorder();

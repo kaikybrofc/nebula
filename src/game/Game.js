@@ -3,9 +3,9 @@ import Input from './Input';
 import Renderer from './Renderer';
 import NetClient from './net/NetClient';
 import RemoteState from './net/RemoteState';
-import { GAME_SETTINGS_DEFAULTS, PLAYER_CONFIG, WORLD_CONFIG } from '../shared/config';
+import { GAME_SETTINGS_DEFAULTS, NET_CONFIG, PLAYER_CONFIG, WORLD_CONFIG } from '../shared/config';
 
-const SEND_RATE = 1 / 30;
+const SEND_RATE = 1 / NET_CONFIG.tps;
 const HUD_UPDATE_INTERVAL = 0.1;
 const FPS_UPDATE_INTERVAL = 0.4;
 const MAX_FRAME_DELTA = 0.1;
@@ -46,6 +46,12 @@ export default class Game {
     this.running = false;
     this.animationFrameId = null;
     this.lastFrameTime = 0;
+    this.currentFrame = {
+      tick: 0,
+      blobs: [],
+      foods: [],
+      pellets: [],
+    };
 
     this.sendTimer = 0;
     this.inputSeq = 0;
@@ -120,7 +126,8 @@ export default class Game {
       this.sendTimer -= SEND_RATE;
     }
 
-    this.updateCamera(frameDelta);
+    this.currentFrame = this.remoteState.getInterpolatedFrame();
+    this.updateCamera(this.currentFrame, frameDelta);
     this.updateFpsCounter(frameDelta);
 
     this.hudTimer += frameDelta;
@@ -129,7 +136,7 @@ export default class Game {
       this.publishStats();
     }
 
-    this.render();
+    this.render(this.currentFrame);
     this.animationFrameId = requestAnimationFrame(this.tick);
   }
 
@@ -152,8 +159,8 @@ export default class Game {
     this.inputSeq += 1;
   }
 
-  updateCamera(deltaTime) {
-    const local = this.remoteState.getLocalAggregate();
+  updateCamera(frame, deltaTime) {
+    const local = this.remoteState.getLocalAggregateFromFrame(frame);
 
     if (!local) {
       return;
@@ -183,8 +190,8 @@ export default class Game {
     this.fpsFrameCount = 0;
   }
 
-  render() {
-    this.renderer.render(this.remoteState);
+  render(frame) {
+    this.renderer.render(frame);
   }
 
   publishStats() {
@@ -192,21 +199,19 @@ export default class Game {
       return;
     }
 
-    const local = this.remoteState.getLocalAggregate();
+    const local = this.remoteState.getLatestLocalAggregate();
+    const counts = this.remoteState.getLatestCounts();
 
     this.onStatsChange({
       mass: local ? local.mass : PLAYER_CONFIG.initialMass,
       radius: local ? local.largestRadius : 0,
-      foodCount: this.remoteState.foods.length,
-      pelletCount: this.remoteState.pellets.length,
+      foodCount: counts.foods,
+      pelletCount: counts.pellets,
       cellCount: local ? local.cellCount : 0,
       fps: this.currentFps,
       score: local ? Math.max(0, local.mass - PLAYER_CONFIG.initialMass) : 0,
-      leaderboard: this.remoteState.leaderboard,
-      playerRank: Math.max(
-        1,
-        this.remoteState.leaderboard.findIndex((entry) => entry.id === this.remoteState.selfId) + 1,
-      ),
+      leaderboard: this.remoteState.getLatestLeaderboard(),
+      playerRank: this.remoteState.getPlayerRank(),
     });
   }
 }

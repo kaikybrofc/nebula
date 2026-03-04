@@ -9,6 +9,12 @@ export const GRID_CONFIG = {
   cellSize: 96,
 };
 
+export const NET_CONFIG = {
+  tps: 30,
+  interpDelayTicks: 4,
+  maxBufferedSnapshots: 90,
+};
+
 export const SIM_CONFIG = {
   seed: 133742,
   maxFrameDelta: 0.1,
