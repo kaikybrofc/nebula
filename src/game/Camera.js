@@ -34,14 +34,14 @@ export default class Camera {
     };
   }
 
-  update(target, deltaTime) {
+  update(target, deltaTime, zoomMultiplier = 1) {
     const followAlpha = 1 - Math.exp(-CAMERA_CONFIG.followSharpness * deltaTime);
     this.x = lerp(this.x, target.x, followAlpha);
     this.y = lerp(this.y, target.y, followAlpha);
 
     const massScale = Math.pow(CAMERA_CONFIG.referenceMass / target.mass, CAMERA_CONFIG.zoomExponent);
     const desiredZoom = clamp(
-      CAMERA_CONFIG.baseZoom * massScale,
+      CAMERA_CONFIG.baseZoom * massScale * zoomMultiplier,
       CAMERA_CONFIG.minZoom,
       CAMERA_CONFIG.maxZoom,
     );

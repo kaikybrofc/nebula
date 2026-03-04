@@ -32,7 +32,6 @@ export default class Renderer {
     ctx.fillStyle = RENDER_CONFIG.background;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // World render in camera space: screen center -> zoom -> world origin.
     ctx.save();
     ctx.translate(this.width / 2, this.height / 2);
     ctx.scale(this.camera.zoom, this.camera.zoom);
@@ -45,10 +44,11 @@ export default class Renderer {
     ctx.rect(0, 0, this.world.width, this.world.height);
     ctx.clip();
 
-    const viewBounds = this.camera.getViewBounds(120);
+    const viewBounds = this.camera.getViewBounds(180);
     this.drawGrid(viewBounds);
     this.drawFood(viewBounds);
-    this.drawPlayer(player);
+    this.drawPellets(viewBounds);
+    this.drawPlayerCells(player.cells, viewBounds);
 
     ctx.restore();
     this.drawWorldBorder();
@@ -64,6 +64,15 @@ export default class Renderer {
 
   drawWorldBorder() {
     const ctx = this.context;
+
+    ctx.save();
+    ctx.lineWidth = 18 / this.camera.zoom;
+    ctx.strokeStyle = RENDER_CONFIG.worldBorderGlow;
+    ctx.globalAlpha = 0.32;
+    ctx.shadowColor = RENDER_CONFIG.worldBorderGlow;
+    ctx.shadowBlur = 30 / this.camera.zoom;
+    ctx.strokeRect(0, 0, this.world.width, this.world.height);
+    ctx.restore();
 
     ctx.lineWidth = 4 / this.camera.zoom;
     ctx.strokeStyle = RENDER_CONFIG.worldBorder;
@@ -100,55 +109,95 @@ export default class Renderer {
     }
   }
 
+  isInsideView(entity, bounds) {
+    return !(
+      entity.pos.x + entity.radius < bounds.left ||
+      entity.pos.x - entity.radius > bounds.right ||
+      entity.pos.y + entity.radius < bounds.top ||
+      entity.pos.y - entity.radius > bounds.bottom
+    );
+  }
+
   drawFood(bounds) {
     const ctx = this.context;
 
     for (let index = 0; index < this.world.food.length; index += 1) {
       const food = this.world.food[index];
 
-      if (
-        food.x + food.radius < bounds.left ||
-        food.x - food.radius > bounds.right ||
-        food.y + food.radius < bounds.top ||
-        food.y - food.radius > bounds.bottom
-      ) {
+      if (!this.isInsideView(food, bounds)) {
         continue;
       }
 
       ctx.beginPath();
       ctx.fillStyle = food.color;
-      ctx.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
+      ctx.arc(food.pos.x, food.pos.y, food.radius, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  drawPlayer(player) {
+  drawPellets(bounds) {
+    const ctx = this.context;
+
+    for (let index = 0; index < this.world.pellets.length; index += 1) {
+      const pellet = this.world.pellets[index];
+
+      if (!this.isInsideView(pellet, bounds)) {
+        continue;
+      }
+
+      ctx.beginPath();
+      ctx.fillStyle = pellet.color;
+      ctx.strokeStyle = pellet.strokeColor;
+      ctx.lineWidth = 2 / this.camera.zoom;
+      ctx.arc(pellet.pos.x, pellet.pos.y, pellet.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  drawPlayerCells(cells, bounds) {
+    for (let index = 0; index < cells.length; index += 1) {
+      const cell = cells[index];
+
+      if (!this.isInsideView(cell, bounds)) {
+        continue;
+      }
+
+      this.drawCell(cell);
+    }
+  }
+
+  drawCell(cell) {
     const ctx = this.context;
 
     ctx.beginPath();
-    ctx.fillStyle = player.color;
-    ctx.strokeStyle = player.strokeColor;
+    ctx.fillStyle = cell.color;
+    ctx.strokeStyle = cell.strokeColor;
     ctx.lineWidth = 6 / this.camera.zoom;
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.arc(cell.pos.x, cell.pos.y, cell.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.arc(
-      player.x - player.radius * 0.32,
-      player.y - player.radius * 0.32,
-      player.radius * 0.35,
+      cell.pos.x - cell.radius * 0.32,
+      cell.pos.y - cell.radius * 0.32,
+      cell.radius * 0.35,
       0,
       Math.PI * 2,
     );
     ctx.fill();
 
-    const fontSize = Math.max(14, player.radius * 0.42);
+    if (cell.radius < 16) {
+      return;
+    }
+
+    const fontSize = Math.max(13, cell.radius * 0.35);
     ctx.font = `${fontSize}px "Trebuchet MS", "Segoe UI", sans-serif`;
     ctx.fillStyle = '#f2f7ff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(player.nickname, player.x, player.y);
+    ctx.fillText(cell.nickname, cell.pos.x, cell.pos.y);
   }
 }
