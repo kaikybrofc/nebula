@@ -36,6 +36,19 @@ export function LeaderboardIcon(props) {
   );
 }
 
+export function TrophyIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M8 5h8v2a4 4 0 0 1-8 0V5Z" />
+      <path d="M10 15h4" />
+      <path d="M12 11v4" />
+      <path d="M9 19h6" />
+      <path d="M8 7H6a2 2 0 0 0 2 2" />
+      <path d="M16 7h2a2 2 0 0 1-2 2" />
+    </IconBase>
+  );
+}
+
 export function SplitIcon(props) {
   return (
     <IconBase {...props}>

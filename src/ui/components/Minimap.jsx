@@ -1,7 +1,5 @@
 import { useEffect, useRef } from 'react';
 
-const MAP_SIZE = 140;
-
 function drawGrid(ctx, size) {
   ctx.strokeStyle = 'rgba(229, 231, 235, 0.18)';
   ctx.lineWidth = 1;
@@ -21,7 +19,7 @@ function drawGrid(ctx, size) {
   }
 }
 
-export default function Minimap({ stats }) {
+export default function Minimap({ stats, size = 140, compact = false }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -37,20 +35,20 @@ export default function Minimap({ stats }) {
       return;
     }
 
-    const size = MAP_SIZE;
+    const mapSize = size;
     const x = stats.playerX / Math.max(1, stats.worldWidth);
     const y = stats.playerY / Math.max(1, stats.worldHeight);
-    const px = Math.max(0, Math.min(size, x * size));
-    const py = Math.max(0, Math.min(size, y * size));
+    const px = Math.max(0, Math.min(mapSize, x * mapSize));
+    const py = Math.max(0, Math.min(mapSize, y * mapSize));
 
-    ctx.clearRect(0, 0, size, size);
+    ctx.clearRect(0, 0, mapSize, mapSize);
     ctx.fillStyle = 'rgba(5, 10, 18, 0.86)';
-    ctx.fillRect(0, 0, size, size);
-    drawGrid(ctx, size);
+    ctx.fillRect(0, 0, mapSize, mapSize);
+    drawGrid(ctx, mapSize);
 
     ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
     ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, size - 2, size - 2);
+    ctx.strokeRect(1, 1, mapSize - 2, mapSize - 2);
 
     ctx.fillStyle = '#3b82f6';
     ctx.beginPath();
@@ -61,11 +59,11 @@ export default function Minimap({ stats }) {
     ctx.beginPath();
     ctx.arc(px, py, 8.5, 0, Math.PI * 2);
     ctx.fill();
-  }, [stats.playerX, stats.playerY, stats.worldHeight, stats.worldWidth]);
+  }, [size, stats.playerX, stats.playerY, stats.worldHeight, stats.worldWidth]);
 
   return (
-    <section className="ui-card minimap-panel" aria-label="Minimap">
-      <canvas ref={canvasRef} width={MAP_SIZE} height={MAP_SIZE} />
+    <section className={`ui-card minimap-panel ${compact ? 'is-compact' : ''}`.trim()} aria-label="Minimap">
+      <canvas ref={canvasRef} width={size} height={size} />
     </section>
   );
 }

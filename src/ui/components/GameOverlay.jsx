@@ -5,13 +5,13 @@ import Leaderboard from './Leaderboard';
 import Minimap from './Minimap';
 import MobileControls from './MobileControls';
 import SettingsPanel from './SettingsPanel';
-import { FullscreenIcon, HelpIcon, SettingsIcon } from './IconPack';
+import { FullscreenIcon, HelpIcon, SettingsIcon, TrophyIcon } from './IconPack';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 900px), (pointer: coarse)');
+    const media = window.matchMedia('(max-width: 768px), (pointer: coarse)');
     const update = () => setIsMobile(media.matches);
     update();
     if (media.addEventListener) {
@@ -32,6 +32,31 @@ function useIsMobile() {
   return isMobile;
 }
 
+function useIsCompactMobile() {
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 420px)');
+    const update = () => setIsCompact(media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener('change', update);
+    } else {
+      media.addListener(update);
+    }
+
+    return () => {
+      if (media.removeEventListener) {
+        media.removeEventListener('change', update);
+      } else {
+        media.removeListener(update);
+      }
+    };
+  }, []);
+
+  return isCompact;
+}
+
 export default function GameOverlay({
   stats,
   settings,
@@ -39,8 +64,13 @@ export default function GameOverlay({
   controls,
 }) {
   const isMobile = useIsMobile();
+  const isCompactMobile = useIsCompactMobile();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [isLeaderboardCollapsed, setIsLeaderboardCollapsed] = useState(false);
+  const leaderboardLimit = isMobile ? (isCompactMobile ? 3 : 5) : 10;
+  const showFps = settings.showFps && !(isMobile && isCompactMobile);
+  const minimapSize = isCompactMobile ? 96 : isMobile ? 110 : 140;
 
   const actions = useMemo(
     () => ({
@@ -65,7 +95,9 @@ export default function GameOverlay({
   }
 
   return (
-    <div className="game-overlay">
+    <div
+      className={`game-overlay ${isMobile ? 'mobile' : ''} ${isCompactMobile ? 'mobile-compact' : ''}`.trim()}
+    >
       <header className="top-controls">
         <button
           type="button"
@@ -102,18 +134,36 @@ export default function GameOverlay({
       )}
 
       {settings.showLeaderboard && (
-        <div className="leaderboard-anchor">
-          <Leaderboard entries={stats.leaderboard} selfId={stats.selfId} />
+        <div className={`leaderboard-anchor ${isMobile ? 'is-mobile' : ''}`.trim()}>
+          {isMobile && (
+            <button
+              type="button"
+              className={`top-icon-btn leaderboard-toggle-btn ${isLeaderboardCollapsed ? 'is-collapsed' : ''}`.trim()}
+              onClick={() => setIsLeaderboardCollapsed((collapsed) => !collapsed)}
+              aria-label={isLeaderboardCollapsed ? 'Mostrar leaderboard' : 'Ocultar leaderboard'}
+            >
+              <TrophyIcon />
+            </button>
+          )}
+
+          {(!isMobile || !isLeaderboardCollapsed) && (
+            <Leaderboard
+              entries={stats.leaderboard}
+              selfId={stats.selfId}
+              limit={leaderboardLimit}
+              compact={isMobile}
+            />
+          )}
         </div>
       )}
 
       <div className="hud-anchor">
-        <Hud stats={stats} showFps={settings.showFps} />
+        <Hud stats={stats} showFps={showFps} compact={isMobile} />
       </div>
 
       {settings.showMinimap && (
         <div className="minimap-anchor">
-          <Minimap stats={stats} />
+          <Minimap stats={stats} size={minimapSize} compact={isMobile} />
         </div>
       )}
 
@@ -128,6 +178,7 @@ export default function GameOverlay({
           onDirectionChange={actions.direction}
           onSplit={actions.split}
           onEjectChange={actions.eject}
+          compact={isCompactMobile}
         />
       )}
 

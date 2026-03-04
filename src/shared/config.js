@@ -13,7 +13,7 @@ export const MOVE_CONFIG = {
   speedExponent: 0.3,
   inputSmoothing: 0.35,
   joystickDeadzone: 0.1,
-  joystickSmoothing: 0.35,
+  joystickSmoothing: 0.38,
   snapVelThreshold: 0.04,
   visualFollow: 0.3,
   visualFollowLocal: 0.32,

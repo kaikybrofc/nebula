@@ -9,7 +9,7 @@
   inset: 0;
   z-index: 1;
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
   display: block;
 }
 
@@ -111,13 +111,23 @@
   z-index: 30;
   pointer-events: none;
   color: #e5e7eb;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --mobile-pad: 12px;
+  --joy-size: 120px;
+  --btn-split: 76px;
+  --btn-eject: 66px;
+  --mini-size: 140px;
+  --leader-w: 220px;
 }
 
 .ui-card {
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(8px);
   box-shadow:
     0 14px 26px rgba(2, 6, 23, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -125,8 +135,8 @@
 
 .top-controls {
   position: fixed;
-  top: 20px;
-  left: 20px;
+  top: calc(var(--safe-top) + 20px);
+  left: calc(var(--safe-left) + 20px);
   z-index: 48;
   display: flex;
   gap: 10px;
@@ -169,8 +179,8 @@
 
 .help-toast {
   position: fixed;
-  top: 74px;
-  left: 20px;
+  top: calc(var(--safe-top) + 74px);
+  left: calc(var(--safe-left) + 20px);
   z-index: 47;
   pointer-events: auto;
   max-width: 280px;
@@ -191,14 +201,33 @@
 
 .leaderboard-anchor {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: calc(var(--safe-top) + 20px);
+  right: calc(var(--safe-right) + 20px);
   z-index: 44;
   pointer-events: auto;
 }
 
+.leaderboard-anchor.is-mobile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.leaderboard-toggle-btn {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+}
+
+.leaderboard-toggle-btn.is-collapsed {
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.6);
+}
+
 .leaderboard-panel {
-  width: 220px;
+  width: var(--leader-w);
   max-height: 300px;
   padding: 12px;
 }
@@ -249,10 +278,16 @@
   color: #f1f5f9;
 }
 
+.leaderboard-empty {
+  margin: 8px 0 2px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
 .hud-anchor {
   position: fixed;
-  left: 20px;
-  bottom: 20px;
+  left: calc(var(--safe-left) + 20px);
+  bottom: calc(var(--safe-bottom) + 20px);
   z-index: 42;
 }
 
@@ -287,15 +322,15 @@
 
 .minimap-anchor {
   position: fixed;
-  right: 20px;
-  bottom: 120px;
+  right: calc(var(--safe-right) + 20px);
+  bottom: calc(var(--safe-bottom) + 120px);
   z-index: 42;
   pointer-events: auto;
 }
 
 .minimap-panel {
-  width: 140px;
-  height: 140px;
+  width: var(--mini-size);
+  height: var(--mini-size);
   padding: 0;
   overflow: hidden;
 }
@@ -308,8 +343,8 @@
 
 .desktop-actions-anchor {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: calc(var(--safe-right) + 20px);
+  bottom: calc(var(--safe-bottom) + 20px);
   z-index: 45;
   pointer-events: auto;
 }
@@ -335,16 +370,33 @@
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease;
+  transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease, filter 130ms ease;
+}
+
+.split-btn {
+  width: var(--split-size, var(--action-size, 56px));
+  height: var(--split-size, var(--action-size, 56px));
+}
+
+.eject-btn {
+  width: var(--eject-size, var(--action-size, 56px));
+  height: var(--eject-size, var(--action-size, 56px));
 }
 
 .action-btn:hover {
   transform: translateY(-1px);
   border-color: rgba(96, 165, 250, 0.82);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.5),
+    0 0 26px rgba(59, 130, 246, 0.3);
 }
 
 .action-btn:active {
-  transform: translateY(0) scale(0.97);
+  transform: translateY(0) scale(0.96);
+  filter: brightness(1.05);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.45),
+    0 0 30px rgba(59, 130, 246, 0.42);
 }
 
 .action-btn .ui-icon {
@@ -354,8 +406,8 @@
 
 .mobile-joystick {
   position: fixed;
-  left: 20px;
-  bottom: 20px;
+  left: calc(var(--safe-left) + 18px);
+  bottom: calc(var(--safe-bottom) + 86px);
   z-index: 46;
   pointer-events: auto;
   touch-action: none;
@@ -363,8 +415,8 @@
 
 .mobile-actions {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: calc(var(--safe-right) + 18px);
+  bottom: calc(var(--safe-bottom) + 86px);
   z-index: 46;
   pointer-events: auto;
   touch-action: none;
@@ -398,8 +450,12 @@
   left: 0;
   z-index: 60;
   width: min(320px, 88vw);
-  height: 100vh;
-  padding: 18px 16px;
+  height: 100dvh;
+  padding:
+    calc(var(--safe-top) + 18px)
+    calc(var(--safe-right) + 16px)
+    calc(var(--safe-bottom) + 18px)
+    calc(var(--safe-left) + 16px);
   border-right: 1px solid rgba(148, 163, 184, 0.25);
   background: rgba(11, 15, 26, 0.92);
   backdrop-filter: blur(14px);
@@ -526,34 +582,179 @@
   }
 }
 
-@media (max-width: 900px) {
-  .leaderboard-anchor {
-    top: 14px;
-    right: 14px;
+@media (max-width: 768px) {
+  .game-overlay.mobile {
+    --leader-w: 170px;
+    --mini-size: 110px;
+    --joy-size: 120px;
+    --btn-split: 76px;
+    --btn-eject: 66px;
   }
 
-  .leaderboard-panel {
-    width: 200px;
-    max-height: 250px;
+  .leaderboard-anchor {
+    top: calc(var(--safe-top) + var(--mobile-pad));
+    right: calc(var(--safe-right) + var(--mobile-pad));
+  }
+
+  .leaderboard-toggle-btn {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .leaderboard-panel.is-compact {
+    width: var(--leader-w);
+    max-height: 160px;
+    padding: 10px;
+  }
+
+  .leaderboard-header {
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+  }
+
+  .leaderboard-list {
+    gap: 2px;
+    max-height: 122px;
+  }
+
+  .leaderboard-item {
+    grid-template-columns: 20px 1fr auto;
+    gap: 6px;
+    min-height: 18px;
+    font-size: 0.74rem;
   }
 
   .top-controls {
-    top: 14px;
-    left: 14px;
+    top: calc(var(--safe-top) + var(--mobile-pad));
+    left: calc(var(--safe-left) + var(--mobile-pad));
+  }
+
+  .top-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .help-toast {
+    top: calc(var(--safe-top) + 64px);
+    left: calc(var(--safe-left) + var(--mobile-pad));
+    max-width: 240px;
+  }
+
+  .hud-anchor {
+    top: calc(var(--safe-top) + 72px);
+    left: calc(var(--safe-left) + var(--mobile-pad));
+    bottom: auto;
+  }
+
+  .hud-clean {
+    width: 160px;
+  }
+
+  .hud-clean.is-compact .hud-label {
+    font-size: 0.72rem;
+  }
+
+  .hud-clean.is-compact .hud-value {
+    font-size: 1.02rem;
+  }
+
+  .minimap-anchor {
+    top: calc(var(--safe-top) + 185px);
+    right: calc(var(--safe-right) + var(--mobile-pad));
+    bottom: auto;
+  }
+
+  .minimap-panel {
+    width: var(--mini-size);
+    height: var(--mini-size);
+  }
+
+  .mobile-joystick {
+    left: calc(var(--safe-left) + 18px);
+    bottom: calc(var(--safe-bottom) + 86px);
+  }
+
+  .mobile-actions {
+    right: calc(var(--safe-right) + 18px);
+    bottom: calc(var(--safe-bottom) + 86px);
+  }
+
+  .action-buttons.is-compact {
+    gap: 14px;
+  }
+
+  .settings-panel {
+    width: min(320px, 92vw);
+  }
+}
+
+@media (max-width: 420px) {
+  .game-overlay.mobile {
+    --leader-w: 156px;
+    --mini-size: 96px;
+    --joy-size: 112px;
+    --btn-split: 70px;
+    --btn-eject: 60px;
+  }
+
+  .top-controls {
+    gap: 8px;
   }
 
   .top-icon-btn {
     width: 40px;
     height: 40px;
+    border-radius: 12px;
+  }
+
+  .leaderboard-panel.is-compact {
+    max-height: 142px;
+    padding: 8px;
+  }
+
+  .leaderboard-header {
+    font-size: 0.75rem;
+  }
+
+  .leaderboard-list {
+    max-height: 106px;
   }
 
   .hud-anchor {
-    left: 20px;
-    bottom: 172px;
+    top: calc(var(--safe-top) + 68px);
+  }
+
+  .hud-clean {
+    width: 148px;
+  }
+
+  .hud-clean.is-compact .hud-label {
+    font-size: 0.69rem;
+  }
+
+  .hud-clean.is-compact .hud-value {
+    font-size: 0.95rem;
   }
 
   .minimap-anchor {
-    right: 20px;
-    bottom: 120px;
+    top: calc(var(--safe-top) + 172px);
+  }
+
+  .mobile-joystick {
+    left: calc(var(--safe-left) + 14px);
+    bottom: calc(var(--safe-bottom) + 80px);
+  }
+
+  .mobile-actions {
+    right: calc(var(--safe-right) + 14px);
+    bottom: calc(var(--safe-bottom) + 80px);
+  }
+
+  .action-btn .ui-icon {
+    width: 21px;
+    height: 21px;
   }
 }

@@ -23,11 +23,22 @@ const initialStats = {
   worldHeight: WORLD_CONFIG.height,
 };
 
+function detectMobileLayout() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+
+  return window.matchMedia('(max-width: 768px), (pointer: coarse)').matches;
+}
+
 export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [nickname, setNickname] = useState('Explorer');
   const [stats, setStats] = useState(initialStats);
-  const [settings, setSettings] = useState(GAME_SETTINGS_DEFAULTS);
+  const [settings, setSettings] = useState(() => ({
+    ...GAME_SETTINGS_DEFAULTS,
+    zoom: detectMobileLayout() ? 1.14 : GAME_SETTINGS_DEFAULTS.zoom,
+  }));
   const gameControlsRef = useRef(null);
 
   const handlePlay = useCallback((nextNickname) => {

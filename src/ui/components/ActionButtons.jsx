@@ -20,9 +20,23 @@ function endPointerHold(event, onEnd) {
   onEnd();
 }
 
-export default function ActionButtons({ size = 56, onSplit, onEjectChange }) {
+export default function ActionButtons({
+  size = 56,
+  splitSize = size,
+  ejectSize = size,
+  compact = false,
+  onSplit,
+  onEjectChange,
+}) {
   return (
-    <div className="action-buttons" style={{ '--action-size': `${size}px` }}>
+    <div
+      className={`action-buttons ${compact ? 'is-compact' : ''}`.trim()}
+      style={{
+        '--action-size': `${size}px`,
+        '--split-size': `${splitSize}px`,
+        '--eject-size': `${ejectSize}px`,
+      }}
+    >
       <button
         type="button"
         className="action-btn split-btn"

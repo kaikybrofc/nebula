@@ -2,13 +2,18 @@ function formatMass(mass) {
   return Math.floor(mass).toLocaleString('pt-BR');
 }
 
-export default function Leaderboard({ entries = [], selfId }) {
+export default function Leaderboard({ entries = [], selfId, limit = 10, compact = false }) {
+  const visibleEntries = entries.slice(0, Math.max(1, limit));
+
   return (
-    <section className="ui-card leaderboard-panel" aria-label="Leaderboard">
+    <section
+      className={`ui-card leaderboard-panel ${compact ? 'is-compact' : ''}`.trim()}
+      aria-label="Leaderboard"
+    >
       <header className="leaderboard-header">Leaderboard</header>
 
       <ol className="leaderboard-list">
-        {entries.slice(0, 10).map((entry, index) => {
+        {visibleEntries.map((entry, index) => {
           const isSelf = selfId && entry.id === selfId;
 
           return (
@@ -23,6 +28,8 @@ export default function Leaderboard({ entries = [], selfId }) {
           );
         })}
       </ol>
+
+      {visibleEntries.length === 0 && <p className="leaderboard-empty">Sem jogadores</p>}
     </section>
   );
 }

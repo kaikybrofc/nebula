@@ -2,9 +2,9 @@ function formatMass(mass) {
   return Math.floor(mass).toLocaleString('pt-BR');
 }
 
-export default function Hud({ stats, showFps }) {
+export default function Hud({ stats, showFps, compact = false }) {
   return (
-    <section className="hud-clean" aria-label="Player stats">
+    <section className={`hud-clean ${compact ? 'is-compact' : ''}`.trim()} aria-label="Player stats">
       <div className="hud-line">
         <span className="hud-label">Massa</span>
         <strong className="hud-value">{formatMass(stats.mass)}</strong>
